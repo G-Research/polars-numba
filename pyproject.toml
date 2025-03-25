@@ -22,10 +22,10 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project.urls]
-Homepage = "https://github.com/gr-oss/polars-numba"
-Changelog = "https://github.com/gr-oss/polars-numba/releases"
-Issues = "https://github.com/gr-oss/polars-numba/issues"
-CI = "https://github.com/gr-oss/polars-numba/actions"
+Homepage = "https://github.com/g-research/polars-numba"
+Changelog = "https://github.com/g-research/polars-numba/releases"
+Issues = "https://github.com/g-research/polars-numba/issues"
+CI = "https://github.com/g-research/polars-numba/actions"
 
 
 [project.optional-dependencies]
