@@ -1,0 +1,30 @@
+[project]
+name = "polars-numba"
+version = "0.1"
+description = "Improved Arrow-based Numba support for Polars"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{name = "G-Research OSS"}]
+license = {text = "Apache-2.0"}
+classifiers = [
+    "License :: OSI Approved :: Apache Software License"
+]
+dependencies = [
+    "awkward",
+    "numba",
+    "pandas", # not ideal, will need to be fixed upstream
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project.urls]
+Homepage = "https://github.com/gr-oss/polars-numba"
+Changelog = "https://github.com/gr-oss/polars-numba/releases"
+Issues = "https://github.com/gr-oss/polars-numba/issues"
+CI = "https://github.com/gr-oss/polars-numba/actions"
+
+
+[project.optional-dependencies]
+test = ["pytest"]
