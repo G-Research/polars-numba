@@ -10,8 +10,10 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License"
 ]
 dependencies = [
+    "polars",
     "awkward",
     "numba",
+    "pyarrow",
     "pandas", # not ideal, will need to be fixed upstream
 ]
 
