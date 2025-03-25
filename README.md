@@ -19,7 +19,7 @@ Given sufficient positive feedback we will turn this into a real package on PyPI
 How to install:
 
 ```
-$ pip install pip install git+https://github.com/gr-oss/polars-numba.git
+$ pip install git+https://github.com/gr-oss/polars-numba.git
 ```
 
 Or add package `git+https://github.com/gr-oss/polars-numba.git` as a dependency to your `requirements.txt`/`pyproject.toml`/etc..
