@@ -1,8 +1,9 @@
 name: Publish Python Package
 
-on:
-  release:
-    types: [created]
+# Disabled for now.
+# on:
+#   release:
+#     types: [created]
 
 permissions:
   contents: read
