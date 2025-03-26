@@ -26,4 +26,4 @@ Or add package `git+https://github.com/g-research/polars-numba.git` as a depende
 
 ## Using `polars-numba`
 
-Again, this is just a proof-of-concept, but you can see usage examples in [`examples.py`](`examples.py`).
+Again, this is just a proof-of-concept, but you can see usage examples in [`examples.py`](examples.py).
