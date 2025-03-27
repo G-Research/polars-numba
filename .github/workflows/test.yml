@@ -26,3 +26,4 @@ jobs:
       run: |
         #python -m pytest
         python examples.py
+        python examples2.py
