@@ -26,4 +26,9 @@ Or add package `git+https://github.com/g-research/polars-numba.git` as a depende
 
 ## Using `polars-numba`
 
-Again, this is just a proof-of-concept, but you can see usage examples in [`examples.py`](examples.py).
+Again, this is just a proof-of-concept, but you can see usage examples:
+
+* [`examples.py`](examples.py) shows the basic API.
+* [`examples2.py`](examples2.py) has examples with datetimes, lists, and structs.
+
+To see API documentation on how to create complex results, see the [API documentation for ArrayBuilder](https://awkward-array.org/doc/main/reference/generated/ak.ArrayBuilder.html).
