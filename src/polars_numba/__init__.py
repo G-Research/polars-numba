@@ -17,7 +17,9 @@ _ReturnType = TypeVar("_ReturnType")
 
 
 def arrow_jit(
-    returns_scalar: bool, return_dtype: PolarsDataType | None = None
+    returns_scalar: bool,
+    return_dtype: PolarsDataType | None = None,
+    is_elementwise: bool = False,
 ) -> Callable[[Callable[[pl.Series], _ReturnType]], Callable[[pl.Expr], pl.Expr]]:
     """
     Decorator factory that wrap a function with Numba.
@@ -90,6 +92,7 @@ def arrow_jit(
                 lambda series: run_func(series, params_info),
                 return_dtype=return_dtype,
                 returns_scalar=returns_scalar,
+                is_elementwise=is_elementwise,
             )
 
         return wrapped
