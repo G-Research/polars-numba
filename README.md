@@ -3,13 +3,14 @@
 While Polars does have support for normal Numba functions, these are not ideal: Polars native data type is Arrow, but Numba by default works on NumPy arrays.
 As a result, using Numba:
 
-1. Requires converting Arrow columns to NumPy arrays, and back.
+1. Requires converting Arrow columns to NumPy arrays, and back, whic can increase memory usage.
 2. Does not support missing data correctly, since that concept doesn't exist in NumPy.
    This is especially a problem for operations that aren't just one-value-at-a-time, for a example a `max()` or windowed function can give the wrong results.
 3. Supports fewer data types, compared to Arrow's more complex support.
 
 This package aims to fix that, by integrating Numba support for Arrow with Polars, building on the Numba support from [the Awkward Array project](https://awkward-array.org).
 Awkward Array's memory representation is compatible with Arrow.
+This should reduce memory usage requirements since it ought to be zero-copy.
 
 ## Current status: proof-of-concept
 
