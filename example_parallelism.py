@@ -70,6 +70,7 @@ assert (
 
 timeit("Eager, not_parallel:", lambda: df.select(not_parallel_sum(pl.col("values"))))
 timeit("Eager, parallel:", lambda: df.select(parallel_sum(pl.col("values"))))
+timeit("Eager, builtin:", lambda: df.select(pl.col("values").sum()))
 timeit(
     "Lazy, not_parallel:",
     lambda: df.lazy().select(not_parallel_sum(pl.col("values"))).collect(),
@@ -77,6 +78,10 @@ timeit(
 timeit(
     "Lazy, parallel:",
     lambda: df.lazy().select(parallel_sum(pl.col("values"))).collect(),
+)
+timeit(
+    "Lazy, builtin:",
+    lambda: df.lazy().select(pl.col("values").sum()).collect(),
 )
 timeit(
     "Lazy streaming, not_parallel:",
@@ -88,5 +93,11 @@ timeit(
     "Lazy streaming, parallel:",
     lambda: df.lazy()
     .select(parallel_sum(pl.col("values")))
+    .collect(engine="streaming"),
+)
+timeit(
+    "Lazy streaming, builtin:",
+    lambda: df.lazy()
+    .select(pl.col("values").sum())
     .collect(engine="streaming"),
 )
