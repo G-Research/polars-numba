@@ -9,8 +9,14 @@ As a result, using Numba:
 3. Supports fewer data types, compared to Arrow's more complex support.
 
 This package aims to fix that, by integrating Numba support for Arrow with Polars, building on the Numba support from [the Awkward Array project](https://awkward-array.org).
+
+## Memory usage
+
 Awkward Array's memory representation is compatible with Arrow.
-This should reduce memory usage requirements since it ought to be zero-copy.
+When doing read-only operations, then, it requires zero additional memory (zero-copy) because it can just use the Arrow data structure directly, with no copying.
+
+When _creating_ a new Series, however, peak memory usage is twice as high as the resulting Series because of the temporary `ArrayBuilder` object required by the current Awkward Array API.
+This ought to be fixable with a new API.
 
 ## Current status: proof-of-concept
 
