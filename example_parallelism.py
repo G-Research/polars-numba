@@ -19,7 +19,7 @@ import polars as pl
 from polars_numba import arrow_jit
 
 
-def timeit(prefix, f, count=1000):
+def timeit(prefix, f, count=100):
     start = time()
     for _ in range(count):
         f()
