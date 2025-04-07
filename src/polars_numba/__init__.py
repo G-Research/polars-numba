@@ -49,7 +49,7 @@ def arrow_jit(
         func: Callable[[pl.Series], _ReturnType]
     ) -> Callable[[pl.Expr], pl.Expr]:
         # Convert to Numba function:
-        jit_func = jit(func)
+        jit_func = jit(nogil=True)(func)
 
         if returns_scalar:
 
