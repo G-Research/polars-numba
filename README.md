@@ -15,7 +15,7 @@ This package aims to fix that, by integrating Numba support for Arrow with Polar
 Awkward Array's memory representation is compatible with Arrow.
 When doing read-only operations, then, it requires zero additional memory (zero-copy) because it can just use the Arrow data structure directly, with no copying.
 
-When _creating_ a new Series, however, peak memory usage is twice as high as the resulting Series because of the temporary `ArrayBuilder` object required by the current Awkward Array API.
+When _creating_ a new Series, however, peak memory usage may be twice as high as the resulting Series, perhaps because of the temporary `ArrayBuilder` object required by the current Awkward Array API.
 This ought to be fixable with a new API.
 
 ## Current status: proof-of-concept
@@ -39,3 +39,11 @@ Again, this is just a proof-of-concept, but you can see usage examples:
 * [`examples2.py`](examples2.py) has examples with datetimes, lists, and structs.
 
 To see API documentation on how to create complex results, see the [API documentation for ArrayBuilder](https://awkward-array.org/doc/main/reference/generated/ak.ArrayBuilder.html).
+
+### Chunking vs whole series
+
+In most cases, the function called with `@arrow_jit` will be called with the _full_ Series.
+The only exception is when you explicitly opted-in to receiving partial batches of the `Series`, by using `@arrow_jit(is_elementwise=True, returns_scalar=False)`; both options are necessary.
+(The `is_elementwise` parameter is passed to [`map_batche()`](https://docs.pola.rs/api/python/stable/reference/expressions/api/polars.Expr.map_batches.html).)
+
+See [`example_chunking.py`](example_chunking.py) and look at its output to get a sense of what happens.
