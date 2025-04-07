@@ -12,12 +12,8 @@ How it works:
     - We can therefore combine a two pass operation to get chunked operations,
       which then get run in the thread pool in parallel.
 
-In none of these modes do multiple threads get used. Interestingly:
-
-1. The Numba version is 10× faster in terms of CPU time than the built-in version (perhaps because it's compiled natively?).
-2. Streaming mode takes 10× as much as CPU, regardless of implementation.
-   This feels excessive to me, it ought to be fixable but that'd require a bunch of digging.
-3. The built-in sum() can take advantage of multiple cores, so clock time can be faster.
+One would hope streaming would enable using multiple threads, but I think this
+is prevented by a bug (https://github.com/pola-rs/polars/issues/22160).
 """
 
 from time import time, process_time
