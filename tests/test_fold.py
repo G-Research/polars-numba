@@ -61,3 +61,15 @@ def test_accumulator_type_casting():
     # First input is explicitly an integer, but the result should be a float:
     result = collect_fold(df, np.int64(10), to_f32, ["a"])
     assert result == 13.75
+
+
+def test_generate_column_names():
+    """
+    If column names aren't given, use the argument names in the passed in
+    function.
+    """
+    def operator(acc, b, a):
+        return acc + 10 * b + a
+
+    df = pl.DataFrame({"acc": [1, 2, 3], "a": [5, 6, 7], "b": [20, 30, 20]})
+    assert collect_fold(df, 0.5, operator) == 718.5

@@ -3,7 +3,6 @@ Higher-level programmable Polars APIs, using Numba.
 
 TODO:
 - Examples of fold()
-- Extract column names from given function
 - Caching of compilation
    - Complain if function's bound variables change
 """
@@ -11,7 +10,7 @@ TODO:
 from __future__ import annotations
 
 from typing import Callable, Concatenate, TypeVar, ParamSpec, TYPE_CHECKING
-
+from inspect import signature
 import polars as pl
 from numba import jit
 
@@ -26,10 +25,14 @@ def collect_fold(
     df: pl.DataFrame | pl.LazyFrame,
     initial_accumulator: Literal,
     function: Callable[Concatenate[Literal, P], T],
-    column_names: list[str],
+    column_names: None | list[str] = None,
 ) -> T:
     """
     Collect a frame into a literal value by folding it using a function.
+
+    If column names are not given, the names of the arguments to the passed in
+    function will be used (skipping the first one, since that's the
+    accumulator).
 
     For each row, the accumulator will be passed in to the function along with
     the values for respective columns.  The result will be a new accumulator
@@ -38,6 +41,8 @@ def collect_fold(
 
     Rows with nulls are filtered out before processing.
     """
+    if column_names is None:
+        column_names = [p for p in signature(function).parameters.keys()][1:]
     lazy_df = df.lazy().select_seq(*column_names).drop_nulls()
     numba_function = jit(nogil=True)(function)
 
