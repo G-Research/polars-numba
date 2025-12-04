@@ -29,4 +29,4 @@ CI = "https://github.com/g-research/polars-numba/actions"
 
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = ["pytest", "numpy"]
