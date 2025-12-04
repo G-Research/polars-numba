@@ -2,6 +2,8 @@
 
 import polars as pl
 from polars_numba import collect_fold
+from numba import float32
+import numpy as np
 
 
 def add_columns(acc, *values):
@@ -43,3 +45,19 @@ def test_nulls_filtered_out():
         }
     )
     assert collect_fold(df, 0.5, add_columns, ["a", "b"]) == 0.5 + 1 + 30 + 3 + 100
+
+
+def test_accumulator_type_casting():
+    """
+    If the accumulator type is different than the return type of the passed-in
+    function, the correct type will be used for future calls.
+    """
+
+    def to_f32(x, a):
+        result = float32(x + a)
+        return result
+
+    df = pl.DataFrame({"a": [1.5, 2.25]})
+    # First input is explicitly an integer, but the result should be a float:
+    result = collect_fold(df, np.int64(10), to_f32, ["a"])
+    assert result == 13.75
