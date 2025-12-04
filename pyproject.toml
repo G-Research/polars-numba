@@ -1,9 +1,9 @@
 [project]
 name = "polars-numba"
 version = "0.1"
-description = "Improved Arrow-based Numba support for Polars"
+description = "Numba-based APIs to extend Polars"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [{name = "G-Research OSS"}]
 license = {text = "Apache-2.0"}
 classifiers = [
@@ -11,10 +11,10 @@ classifiers = [
 ]
 dependencies = [
     "polars",
-    "awkward",
+    #"awkward",
     "numba",
-    "pyarrow",
-    "pandas", # not ideal, will need to be fixed upstream
+    #"pyarrow",
+    #"pandas", # not ideal, will need to be fixed upstream
 ]
 
 [build-system]
