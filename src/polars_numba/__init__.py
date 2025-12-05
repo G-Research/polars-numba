@@ -3,7 +3,7 @@ Higher-level programmable Polars APIs, using Numba.
 
 TODO:
 - Examples of fold()
-- Caching of compilation
+- DONE: Caching of compilation
    - Complain if function's bound variables change
 """
 
@@ -19,6 +19,111 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 P = ParamSpec("P")
+
+
+@jit(nogil=True)
+def _folder1(numba_function, acc, arr1):
+    """Loop and fold a 1-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(acc, arr1[i])
+    return acc
+
+
+@jit(nogil=True)
+def _folder2(numba_function, acc, arr1, arr2):
+    """Loop and fold a 2-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(acc, arr1[i], arr2[i])
+    return acc
+
+
+@jit(nogil=True)
+def _folder3(numba_function, acc, arr1, arr2, arr3):
+    """Loop and fold a 3-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(acc, arr1[i], arr2[i], arr3[i])
+    return acc
+
+
+@jit(nogil=True)
+def _folder4(numba_function, acc, arr1, arr2, arr3, arr4):
+    """Loop and fold a 4-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i])
+    return acc
+
+
+@jit(nogil=True)
+def _folder5(numba_function, acc, arr1, arr2, arr3, arr4, arr5):
+    """Loop and fold a 5-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i])
+    return acc
+
+
+@jit(nogil=True)
+def _folder6(numba_function, acc, arr1, arr2, arr3, arr4, arr5, arr6):
+    """Loop and fold a 6-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i], arr6[i])
+    return acc
+
+
+@jit(nogil=True)
+def _folder7(numba_function, acc, arr1, arr2, arr3, arr4, arr5, arr6, arr7):
+    """Loop and fold a 7-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(
+            acc,
+            arr1[i],
+            arr2[i],
+            arr3[i],
+            arr4[i],
+            arr5[i],
+            arr6[i],
+            arr7[i],
+        )
+    return acc
+
+
+@jit(nogil=True)
+def _folder8(numba_function, acc, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8):
+    """Loop and fold a 8-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(
+            acc,
+            arr1[i],
+            arr2[i],
+            arr3[i],
+            arr4[i],
+            arr5[i],
+            arr6[i],
+            arr7[i],
+            arr8[i],
+        )
+    return acc
+
+
+@jit(nogil=True)
+def _folder9(numba_function, acc, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8, arr9):
+    """Loop and fold a 9-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(
+            acc,
+            arr1[i],
+            arr2[i],
+            arr3[i],
+            arr4[i],
+            arr5[i],
+            arr6[i],
+            arr7[i],
+            arr8[i],
+            arr9[i],
+        )
+    return acc
+
+
+_NUMBA_CACHE = {}
 
 
 def collect_fold(
@@ -44,7 +149,11 @@ def collect_fold(
     if column_names is None:
         column_names = [p for p in signature(function).parameters.keys()][1:]
     lazy_df = df.lazy().select_seq(*column_names).drop_nulls()
-    numba_function = jit(nogil=True)(function)
+    if function in _NUMBA_CACHE:
+        numba_function = _NUMBA_CACHE[function]
+    else:
+        numba_function = jit(nogil=True)(function)
+        _NUMBA_CACHE[function] = numba_function
 
     # As an alternative to doing dispatch here, we could do the dispatch inside
     # the Numba function, which would be less verbose and duplicative. However,
@@ -55,110 +164,31 @@ def collect_fold(
             raise ValueError("You must pass in at least one column name")
 
         case 1:
-
-            @jit(nogil=True)
-            def folder(acc, arr1):
-                for i in range(len(arr1)):
-                    acc = numba_function(acc, arr1[i])
-                return acc
+            folder = _folder1
 
         case 2:
-
-            @jit(nogil=True)
-            def folder(acc, arr1, arr2):
-                for i in range(len(arr1)):
-                    acc = numba_function(acc, arr1[i], arr2[i])
-                return acc
+            folder = _folder2
 
         case 3:
-
-            @jit(nogil=True)
-            def folder(acc, arr1, arr2, arr3):
-                for i in range(len(arr1)):
-                    acc = numba_function(acc, arr1[i], arr2[i], arr3[i])
-                return acc
+            folder = _folder3
 
         case 4:
-
-            @jit(nogil=True)
-            def folder(acc, arr1, arr2, arr3, arr4):
-                for i in range(len(arr1)):
-                    acc = numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i])
-                return acc
+            folder = _folder4
 
         case 5:
-
-            @jit(nogil=True)
-            def folder(acc, arr1, arr2, arr3, arr4, arr5):
-                for i in range(len(arr1)):
-                    acc = numba_function(
-                        acc, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i]
-                    )
-                return acc
+            folder = _folder5
 
         case 6:
-
-            @jit(nogil=True)
-            def folder(acc, arr1, arr2, arr3, arr4, arr5, arr6):
-                for i in range(len(arr1)):
-                    acc = numba_function(
-                        acc, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i], arr6[i]
-                    )
-                return acc
+            folder = _folder6
 
         case 7:
-
-            @jit(nogil=True)
-            def folder(acc, arr1, arr2, arr3, arr4, arr5, arr6, arr7):
-                for i in range(len(arr1)):
-                    acc = numba_function(
-                        acc,
-                        arr1[i],
-                        arr2[i],
-                        arr3[i],
-                        arr4[i],
-                        arr5[i],
-                        arr6[i],
-                        arr7[i],
-                    )
-                return acc
+            folder = _folder7
 
         case 8:
-
-            @jit(nogil=True)
-            def folder(acc, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8):
-                for i in range(len(arr1)):
-                    acc = numba_function(
-                        acc,
-                        arr1[i],
-                        arr2[i],
-                        arr3[i],
-                        arr4[i],
-                        arr5[i],
-                        arr6[i],
-                        arr7[i],
-                        arr8[i],
-                    )
-                return acc
+            folder = _folder8
 
         case 9:
-
-            @jit(nogil=True)
-            def folder(acc, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8, arr9):
-                for i in range(len(arr1)):
-                    acc = numba_function(
-                        acc,
-                        arr1[i],
-                        arr2[i],
-                        arr3[i],
-                        arr4[i],
-                        arr5[i],
-                        arr6[i],
-                        arr7[i],
-                        arr8[i],
-                        arr9[i],
-                    )
-                return acc
+            folder = _folder9
 
         case _:
             raise RuntimeError(
@@ -168,5 +198,7 @@ def collect_fold(
 
     acc = initial_accumulator
     for batch_df in lazy_df.collect_batches(chunk_size=50_000):
-        acc = folder(acc, *(batch_df[n].to_numpy() for n in column_names))
+        acc = folder(
+            numba_function, acc, *(batch_df[n].to_numpy() for n in column_names)
+        )
     return acc

@@ -1,5 +1,8 @@
 """Tests for collect_fold()."""
 
+from time import process_time
+from contextlib import contextmanager
+from dataclasses import dataclass
 import polars as pl
 from polars_numba import collect_fold
 from numba import float32
@@ -10,6 +13,24 @@ def add_columns(acc, *values):
     for v in values:
         acc += v
     return acc
+
+
+@dataclass
+class Elapsed:
+    time: float | None = None
+
+
+@contextmanager
+def measure_cpu_time():
+    """
+    Context manager that measures elapsed process CPU time.
+    """
+    elapsed = Elapsed()
+    start = process_time()
+    try:
+        yield elapsed
+    finally:
+        elapsed.time = process_time() - start
 
 
 def test_varying_number_of_columns():
@@ -68,8 +89,50 @@ def test_generate_column_names():
     If column names aren't given, use the argument names in the passed in
     function.
     """
+
     def operator(acc, b, a):
         return acc + 10 * b + a
 
     df = pl.DataFrame({"acc": [1, 2, 3], "a": [5, 6, 7], "b": [20, 30, 20]})
     assert collect_fold(df, 0.5, operator) == 718.5
+
+
+def test_compiled_function_caching():
+    """
+    If collect_fold() is called with the same function and same types again, it
+    uses a cached version of the Numba precompiled function.
+
+    If the types change, the already-cached version is not used.
+    """
+
+    def multiply(acc, a):
+        return acc * a
+
+    # The first time we pass in a function with specific types, it needs to be
+    # compiled so this will take some time.
+    df = pl.DataFrame({"a": [3]}, schema={"a": pl.UInt64()}).lazy()
+    with measure_cpu_time() as elapsed:
+        assert collect_fold(df, np.uint64(2), multiply, ["a"]) == 6
+    assert elapsed.time > 0.010
+
+    # The next few times we expect a cached version to be used, so it should be
+    # much faster.
+    rounds = 20
+    with measure_cpu_time() as elapsed:
+        for _ in range(rounds):
+            assert collect_fold(df, np.uint64(4), multiply, ["a"]) == 12
+    # TODO It's still slower than I would expect, might be fixed overhead from
+    # Polars, investigate and write test that for large amounts of data it is
+    # actually fast.
+    assert elapsed.time / rounds < 0.001
+
+    # If we use a different type, it compiles a new version:
+    df = pl.DataFrame({"a": [3]}, schema={"a": pl.UInt64()}).lazy()
+    assert collect_fold(df, 0.5, multiply, ["a"]) == 1.5
+
+
+def test_no_globals_capture():
+    """
+    TODO Disallow globals capture in passed in functions, or...  maybe just
+    complain if they change?
+    """
