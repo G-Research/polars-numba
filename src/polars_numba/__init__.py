@@ -251,7 +251,7 @@ def collect_fold(
             )
 
     acc = initial_accumulator
-    for batch_df in lazy_df.collect_batches(chunk_size=50_000):
+    for batch_df in lazy_df.collect_batches(chunk_size=50_000, lazy=True):
         acc = folder(
             numba_function, acc, *(batch_df[n].to_numpy() for n in column_names)
         )
