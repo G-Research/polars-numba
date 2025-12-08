@@ -29,4 +29,4 @@ jobs:
     - name: Run tests
       run: |
         python -m pytest
-        python examples_flow.py
+        python examples_fold.py
