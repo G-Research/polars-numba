@@ -178,6 +178,8 @@ def collect_fold(
     """
     Collect a frame into a literal value by folding it using a function.
 
+    Streaming is used to save memory.
+
     If column names are not given, the names of the arguments to the passed in
     function will be used (skipping the first one, since that's the
     accumulator).
