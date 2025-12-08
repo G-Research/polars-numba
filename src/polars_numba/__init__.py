@@ -2,15 +2,15 @@
 Higher-level programmable Polars APIs, using Numba.
 
 TODO:
+- README
 - Examples of fold()
-- DONE: Caching of compilation
-   - Complain if function's bound variables change
 """
 
 from __future__ import annotations
 
+from types import FunctionType
 from typing import Callable, Concatenate, TypeVar, ParamSpec, TYPE_CHECKING
-from inspect import signature
+from inspect import signature, getclosurevars
 import polars as pl
 from numba import jit
 
@@ -124,6 +124,49 @@ def _folder9(numba_function, acc, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8
 
 
 _NUMBA_CACHE = {}
+_CAPTURED_VARS_HASHES: dict[FunctionType, int] = {}
+
+_CAPTURED_VARS_CHANGED_MESSAGE = """\
+You have changed a captured variable in a function passed to collect_fold().
+
+Function {function} uses the following captured variables: {variables}.
+
+If you are using a function repeatedly with collect_fold(), these captured\
+ variables must not change, but one of them at least has changed since\
+ the last call.
+"""
+
+
+def _ensure_captured_vars_are_unchanged(function: FunctionType) -> None:
+    """
+    Raise a RuntimeError if captured variables in the function have changed
+    since the last time this was called.
+
+    TODO Right now this is a heuristic and might not catch all cases.  Also
+    will fail on mutable captured vars.  Maybe use DeepHash from DeepDiff?
+    This would use cryptographic hash so would also reduce chance of false
+    negative to be negligible.
+    """
+    closurevars = getclosurevars(function)
+    captured = [
+        (name, cell.cell_contents)
+        for (name, cell) in zip(
+            function.__code__.co_freevars or (), function.__closure__ or ()
+        )
+    ]
+    captured.extend([(n, function.__globals__[n]) for n in closurevars.globals])
+    captured.sort()
+    vars_hash = hash(tuple(captured))
+    if recorded_hash := _CAPTURED_VARS_HASHES.get(function):
+        if recorded_hash != vars_hash:
+            raise RuntimeError(
+                _CAPTURED_VARS_CHANGED_MESSAGE.format(
+                    variables=", ".join(name for (name, _) in captured),
+                    function=function,
+                )
+            )
+    else:
+        _CAPTURED_VARS_HASHES[function] = vars_hash
 
 
 def collect_fold(
@@ -139,16 +182,24 @@ def collect_fold(
     function will be used (skipping the first one, since that's the
     accumulator).
 
-    For each row, the accumulator will be passed in to the function along with
-    the values for respective columns.  The result will be a new accumulator
-    used for the next row.  The final accumulator is the result of this
-    function.
+    For each row, the accumulator will be passed in to the given function along
+    with the values for respective columns.  The result will be a new
+    accumulator used for the next row.  The final accumulator is the result of
+    this function.
 
     Rows with nulls are filtered out before processing.
+
+    The given function will be compiled with Numba.  If it captures variables,
+    those variables must not change over time, since the function will only be
+    compiled once.
     """
+    assert isinstance(function, FunctionType)
+    _ensure_captured_vars_are_unchanged(function)
+
     if column_names is None:
         column_names = [p for p in signature(function).parameters.keys()][1:]
     lazy_df = df.lazy().select_seq(*column_names).drop_nulls()
+
     if function in _NUMBA_CACHE:
         numba_function = _NUMBA_CACHE[function]
     else:
@@ -192,8 +243,9 @@ def collect_fold(
 
         case _:
             raise RuntimeError(
-                f"You passed in {len(column_names)} columns, but currently only up to 9"
-                " columns are supported; if you need more, file an issue"
+                f"You passed in {len(column_names)} columns, but currently "
+                "only up to 9 columns are supported; if you need more, file "
+                "an issue."
             )
 
     acc = initial_accumulator

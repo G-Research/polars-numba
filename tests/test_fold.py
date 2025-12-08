@@ -3,10 +3,12 @@
 from time import process_time
 from contextlib import contextmanager
 from dataclasses import dataclass
+
 import polars as pl
 from polars_numba import collect_fold
 from numba import float32
 import numpy as np
+import pytest
 
 
 def add_columns(acc, *values):
@@ -131,8 +133,32 @@ def test_compiled_function_caching():
     assert collect_fold(df, 0.5, multiply, ["a"]) == 1.5
 
 
-def test_no_globals_capture():
+CAPTURED_GLOBALS = 7000
+
+
+def test_captured_variables_must_not_change():
     """
-    TODO Disallow globals capture in passed in functions, or...  maybe just
-    complain if they change?
+    If a function uses captured variables, they must not change across calls.
     """
+    captured_var = 100
+
+    def func(acc, x):
+        return acc + x + captured_var + CAPTURED_GLOBALS
+
+    df = pl.DataFrame({"a": [3]}, schema={"a": pl.UInt64()}).lazy()
+    assert collect_fold(df, 20, func, ["a"]) == 7123
+
+    # Change a local captured var:
+    captured_var = 200
+    with pytest.raises(RuntimeError, match="changed a captured variable"):
+        collect_fold(df, 20, func, ["a"])
+
+    # Restore local captured var:
+    captured_var = 100
+    assert collect_fold(df, 40, func, ["a"]) == 7143
+
+    # Change global captured var:
+    global CAPTURED_GLOBALS
+    CAPTURED_GLOBALS = 6000
+    with pytest.raises(RuntimeError, match="changed a captured variable"):
+        collect_fold(df, 20, func, ["a"])
