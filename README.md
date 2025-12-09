@@ -34,3 +34,16 @@ The passed in fold function is compiled with Numba, so runtime should be fast (t
 
 You can see examples in [`examples_fold.py`](examples_fold.py).
 
+## Scanning with `collect_scan()`
+
+The second API provided by `polars_numba` is scanning (in the functional programming usage).
+
+Given a `DataFrame` or `LazyFrame`, you can use `polars_numba.collect_scan()` to run a scan on the data.
+A scan is a function that takes an accumulator and the values of specific columns.
+It returns a new accumulator, which is used as the value for a row in the result and also passed on to the next call.
+The final result is a `Series`, the result of all the scan calls.
+
+Data is processed in batches, using the streaming engine, so memory usage should be constrained, though the final `Series` is fully in memory.
+As with the fold, the passed in scan function is compiled with Numba.
+
+You can see examples in [`examples_scan.py`](examples_scan.py).

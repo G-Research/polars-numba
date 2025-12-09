@@ -21,4 +21,5 @@ def highest_so_far(highest_so_far, price):
 
 
 series = collect_scan(df, 0, highest_so_far, pl.UInt64)
+#         Original values: [20, 19, 21, 22, 23, 21, 20, 24, 25]
 assert series.to_list() == [20, 20, 21, 22, 23, 23, 23, 24, 25]
