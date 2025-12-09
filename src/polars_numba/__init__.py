@@ -12,13 +12,10 @@ TODO
 from __future__ import annotations
 
 from types import FunctionType
-from typing import Callable, Concatenate, TypeVar, ParamSpec, TYPE_CHECKING
+from typing import Callable, Concatenate, TypeVar, ParamSpec
 from inspect import signature, getclosurevars
 import polars as pl
 from numba import jit
-
-if TYPE_CHECKING:
-    from polars._typing import Literal
 
 T = TypeVar("T")
 P = ParamSpec("P")
@@ -174,8 +171,8 @@ def _ensure_captured_vars_are_unchanged(function: FunctionType) -> None:
 
 def collect_fold(
     df: pl.DataFrame | pl.LazyFrame,
-    initial_accumulator: Literal,
-    function: Callable[Concatenate[Literal, P], T],
+    initial_accumulator: T,
+    function: Callable[Concatenate[T, P], T],
     column_names: None | list[str] = None,
 ) -> T:
     """
