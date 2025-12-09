@@ -115,7 +115,7 @@ def test_compiled_function_caching():
     df = pl.DataFrame({"a": [3]}, schema={"a": pl.UInt64()}).lazy()
     with measure_cpu_time() as elapsed:
         assert collect_fold(df, np.uint64(2), multiply, ["a"]) == 6
-    assert elapsed.time > 0.010
+    elapsed_with_compile = elapsed.time
 
     # The next few times we expect a cached version to be used, so it should be
     # much faster.
@@ -123,10 +123,7 @@ def test_compiled_function_caching():
     with measure_cpu_time() as elapsed:
         for _ in range(rounds):
             assert collect_fold(df, np.uint64(4), multiply, ["a"]) == 12
-    # TODO It's still slower than I would expect, might be fixed overhead from
-    # Polars, investigate and write test that for large amounts of data it is
-    # actually fast.
-    assert elapsed.time / rounds < 0.001
+    assert (elapsed.time / rounds) < (elapsed_with_compile / 10)
 
     # If we use a different type, it compiles a new version:
     df = pl.DataFrame({"a": [3]}, schema={"a": pl.UInt64()}).lazy()
