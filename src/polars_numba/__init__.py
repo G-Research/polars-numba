@@ -12,7 +12,7 @@ TODO
 from __future__ import annotations
 
 from types import FunctionType
-from typing import Callable, Concatenate, TypeVar, ParamSpec
+from typing import Callable, Concatenate, TypeVar, ParamSpec, TYPE_CHECKING
 from inspect import signature, getclosurevars
 import numpy as np
 import polars as pl
@@ -20,6 +20,8 @@ from polars.datatypes import DataType
 from numba import jit
 from numba.core.dispatcher import Dispatcher
 
+if TYPE_CHECKING:
+    from polars.datatypes import PolarsDataType
 
 T = TypeVar("T")
 P = ParamSpec("P")
@@ -292,27 +294,34 @@ def collect_fold(
         )
     return acc
 
-def _polars_dtype_to_numpy(dtype: DataType) -> np.dtype:
+
+_POLARS_DTYPE_TO_NUMPY = {
+    pl.Datetime: np.datetime64,
+    pl.Boolean: np.bool,
+    pl.Float32: np.float32,
+    pl.Float64: np.float64,
+    pl.Int8: np.int8,
+    pl.Int16: np.int16,
+    pl.Int32: np.int32,
+    pl.Int64: np.int64,
+    pl.Duration: np.timedelta64,
+    pl.UInt8: np.uint8,
+    pl.UInt16: np.uint16,
+    pl.UInt32: np.uint32,
+    pl.UInt64: np.uint64,
+}
+if hasattr(pl, "Float16") and hasattr(np, "float16"):
+    _POLARS_DTYPE_TO_NUMPY[pl.Float16] = np.float16
+
+
+def _polars_dtype_to_numpy(dtype: PolarsDataType) -> np.dtype:
     """
     Convert a Polars dtype to a NumPy dtype.
     """
-    dtype_class = type(dtype)
-    return {
-pl.Datetime: np.datetime64,
-pl.Boolean: np.bool, 
-pl.Float16: np.float16, 
-pl.Float32: np.float32, 
-pl.Float64: np.float64, 
-pl.Int8: np.int8,    
-pl.Int16: np.int16,   
-pl.Int32: np.int32,   
-pl.Int64: np.int64,   
-pl.Duration: np.timedelta64,
-pl.UInt8: np.uint8,   
-pl.UInt16: np.uint16,  
-pl.UInt32: np.uint32,  
-pl.UInt64: np.uin64}[dtype_class]
-
+    # TODO test both paths
+    if not isinstance(dtype, type):
+        dtype = type(dtype)
+    return _POLARS_DTYPE_TO_NUMPY[dtype]
 
 
 def collect_scan(
@@ -375,10 +384,13 @@ def collect_scan(
     results = []
     for batch_df in lazy_df.collect_batches(chunk_size=50_000, lazy=True):
         batch_result = np.empty((len(batch_df),), dtype=np_dtype)
-        results.append(batch_result)
         acc = scanner(
-            numba_function, acc, batch_result, *(batch_df[n].to_numpy() for n in column_names)
+            numba_function,
+            acc,
+            batch_result,
+            *(batch_df[n].to_numpy() for n in column_names),
         )
+        results.append(pl.Series(batch_result, dtype=result_dtype))
+
     result = pl.concat(results)
-    assert result.dtype == result_dtype  # Or maybe cast?
     return result
