@@ -1,9 +1,12 @@
 """
 Higher-level programmable Polars APIs, using Numba.
 
-TODO:
-- README
-- Examples of fold()
+TODO
+
+    - Cached compiled version is faster, but it's still slower than I would
+      expect, might be fixed overhead from Polars, investigate, write test that
+      for large amounts of data it is actually fast, file/fix upstream if
+      relevant.
 """
 
 from __future__ import annotations
