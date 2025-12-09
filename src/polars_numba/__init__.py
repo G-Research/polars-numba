@@ -14,11 +14,17 @@ from __future__ import annotations
 from types import FunctionType
 from typing import Callable, Concatenate, TypeVar, ParamSpec
 from inspect import signature, getclosurevars
+import numpy as np
 import polars as pl
+from polars.datatypes import DataType
 from numba import jit
+from numba.core.dispatcher import Dispatcher
+
 
 T = TypeVar("T")
 P = ParamSpec("P")
+
+__all__ = ["collect_fold", "collect_scan"]
 
 
 @jit(nogil=True)
@@ -123,6 +129,15 @@ def _folder9(numba_function, acc, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8
     return acc
 
 
+@jit(nogil=True)
+def _scanner1(numba_function, acc, result, arr1):
+    """Loop and fold a 1-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(acc, arr1[i])
+        result[i] = acc
+    return acc, result
+
+
 _NUMBA_CACHE = {}
 _CAPTURED_VARS_HASHES: dict[FunctionType, int] = {}
 
@@ -169,6 +184,37 @@ def _ensure_captured_vars_are_unchanged(function: FunctionType) -> None:
         _CAPTURED_VARS_HASHES[function] = vars_hash
 
 
+def _prep_args(
+    df: pl.DataFrame | pl.LazyFrame,
+    function: FunctionType,
+    column_names: None | list[str] = None,
+) -> tuple[pl.LazyFrame, Dispatcher, list[str]]:
+    """
+    Prepare arguments for use.
+
+        1. Convert frame to ``LazyFrame``.
+
+        2. Extract column names if necessary.
+
+        3. Validate the function and (utilizing a cache) wrap it with
+           ``numba.jit``.
+    """
+    assert isinstance(function, FunctionType)
+    _ensure_captured_vars_are_unchanged(function)
+
+    if column_names is None:
+        column_names = [p for p in signature(function).parameters.keys()][1:]
+    lazy_df = df.lazy().select_seq(*column_names).drop_nulls()
+
+    if function in _NUMBA_CACHE:
+        numba_function = _NUMBA_CACHE[function]
+    else:
+        numba_function = jit(nogil=True)(function)
+        _NUMBA_CACHE[function] = numba_function
+
+    return (lazy_df, numba_function, column_names)
+
+
 def collect_fold(
     df: pl.DataFrame | pl.LazyFrame,
     initial_accumulator: T,
@@ -185,7 +231,7 @@ def collect_fold(
     accumulator).
 
     For each row, the accumulator will be passed in to the given function along
-    with the values for respective columns.  The result will be a new
+    with the values for respective columns.  The returned result will be a new
     accumulator used for the next row.  The final accumulator is the result of
     this function.
 
@@ -195,18 +241,7 @@ def collect_fold(
     those variables must not change over time, since the function will only be
     compiled once.
     """
-    assert isinstance(function, FunctionType)
-    _ensure_captured_vars_are_unchanged(function)
-
-    if column_names is None:
-        column_names = [p for p in signature(function).parameters.keys()][1:]
-    lazy_df = df.lazy().select_seq(*column_names).drop_nulls()
-
-    if function in _NUMBA_CACHE:
-        numba_function = _NUMBA_CACHE[function]
-    else:
-        numba_function = jit(nogil=True)(function)
-        _NUMBA_CACHE[function] = numba_function
+    (lazy_df, numba_function, column_names) = _prep_args(df, function, column_names)
 
     # As an alternative to doing dispatch here, we could do the dispatch inside
     # the Numba function, which would be less verbose and duplicative. However,
@@ -256,3 +291,94 @@ def collect_fold(
             numba_function, acc, *(batch_df[n].to_numpy() for n in column_names)
         )
     return acc
+
+def _polars_dtype_to_numpy(dtype: DataType) -> np.dtype:
+    """
+    Convert a Polars dtype to a NumPy dtype.
+    """
+    dtype_class = type(dtype)
+    return {
+pl.Datetime: np.datetime64,
+pl.Boolean: np.bool, 
+pl.Float16: np.float16, 
+pl.Float32: np.float32, 
+pl.Float64: np.float64, 
+pl.Int8: np.int8,    
+pl.Int16: np.int16,   
+pl.Int32: np.int32,   
+pl.Int64: np.int64,   
+pl.Duration: np.timedelta64,
+pl.UInt8: np.uint8,   
+pl.UInt16: np.uint16,  
+pl.UInt32: np.uint32,  
+pl.UInt64: np.uin64}[dtype_class]
+
+
+
+def collect_scan(
+    df: pl.DataFrame | pl.LazyFrame,
+    initial_accumulator: T,
+    function: Callable[Concatenate[T, P], T],
+    result_dtype: PolarsDataType,
+    column_names: None | list[str] = None,
+) -> pl.Series:
+    """
+    Collect a frame into a ``Series`` by scanning it using a function.
+
+    For each row, the accumulator will be passed in to the given function along
+    with the values for respective columns.  The returned result is used both
+    as the corresponding value for the final ``Series`` and as the accumulator
+    for the next row.
+    """
+    (lazy_df, numba_function, column_names) = _prep_args(df, function, column_names)
+    np_dtype = _polars_dtype_to_numpy(result_dtype)
+
+    match len(column_names):
+        case 0:
+            raise ValueError("You must pass in at least one column name")
+
+        case 1:
+            scanner = _scanner1
+
+        case 2:
+            scanner = _scanner2
+
+        case 3:
+            scanner = _scanner3
+
+        case 4:
+            scanner = _scanner4
+
+        case 5:
+            scanner = _scanner5
+
+        case 6:
+            scanner = _scanner6
+
+        case 7:
+            scanner = _scanner7
+
+        case 8:
+            scanner = _scanner8
+
+        case 9:
+            scanner = _scanner9
+
+        case _:
+            raise RuntimeError(
+                f"You passed in {len(column_names)} columns, but currently "
+                "only up to 9 columns are supported; if you need more, file "
+                "an issue."
+            )
+
+    acc = initial_accumulator
+    results = []
+    for batch_df in lazy_df.collect_batches(chunk_size=50_000, lazy=True):
+        batch_result = np.empty((len(batch_df),), dtype=np_dtype)
+        results.append(batch_result)
+        acc = scanner(
+            numba_function, acc, batch_result, *(batch_df[n].to_numpy() for n in column_names)
+        )
+    result = pl.concat(results)
+    assert result.dtype == result_dtype  # Or maybe cast?
+    return result
