@@ -30,3 +30,4 @@ jobs:
       run: |
         python -m pytest
         python examples_fold.py
+        python examples_scan.py
