@@ -131,15 +131,6 @@ def _folder9(numba_function, acc, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8
     return acc
 
 
-@jit(nogil=True)
-def _scanner1(numba_function, acc, result, arr1):
-    """Loop and fold a 1-argument function."""
-    for i in range(len(arr1)):
-        acc = numba_function(acc, arr1[i])
-        result[i] = acc
-    return acc, result
-
-
 _NUMBA_CACHE = {}
 _CAPTURED_VARS_HASHES: dict[FunctionType, int] = {}
 
@@ -324,6 +315,121 @@ def _polars_dtype_to_numpy(dtype: PolarsDataType) -> np.dtype:
     return _POLARS_DTYPE_TO_NUMPY[dtype]
 
 
+@jit(nogil=True)
+def _scanner1(numba_function, acc, result, arr1):
+    """Loop and fold a 1-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(acc, arr1[i])
+        result[i] = acc
+    return acc, result
+
+
+@jit(nogil=True)
+def _scanner2(numba_function, acc, result, arr1, arr2):
+    """Loop and fold a 2-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(acc, arr1[i], arr2[i])
+        result[i] = acc
+    return acc, result
+
+
+@jit(nogil=True)
+def _scanner3(numba_function, acc, result, arr1, arr2, arr3):
+    """Loop and fold a 3-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(acc, arr1[i], arr2[i], arr3[i])
+        result[i] = acc
+    return acc, result
+
+
+@jit(nogil=True)
+def _scanner4(numba_function, acc, result, arr1, arr2, arr3, arr4):
+    """Loop and fold a 4-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i])
+        result[i] = acc
+    return acc, result
+
+
+@jit(nogil=True)
+def _scanner5(numba_function, acc, result, arr1, arr2, arr3, arr4, arr5):
+    """Loop and fold a 5-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i])
+        result[i] = acc
+    return acc, result
+
+
+@jit(nogil=True)
+def _scanner6(numba_function, acc, result, arr1, arr2, arr3, arr4, arr5, arr6):
+    """Loop and fold a 6-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i], arr6[i])
+        result[i] = acc
+    return acc, result
+
+
+@jit(nogil=True)
+def _scanner7(numba_function, acc, result, arr1, arr2, arr3, arr4, arr5, arr6, arr7):
+    """Loop and fold a 7-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(
+            acc,
+            arr1[i],
+            arr2[i],
+            arr3[i],
+            arr4[i],
+            arr5[i],
+            arr6[i],
+            arr7[i],
+        )
+        result[i] = acc
+    return acc, result
+
+
+@jit(nogil=True)
+def _scanner8(
+    numba_function, acc, result, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8
+):
+    """Loop and fold a 8-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(
+            acc,
+            arr1[i],
+            arr2[i],
+            arr3[i],
+            arr4[i],
+            arr5[i],
+            arr6[i],
+            arr7[i],
+            arr8[i],
+        )
+        result[i] = acc
+    return acc, result
+
+
+@jit(nogil=True)
+def _scanner9(
+    numba_function, acc, result, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8, arr9
+):
+    """Loop and fold a 9-argument function."""
+    for i in range(len(arr1)):
+        acc = numba_function(
+            acc,
+            arr1[i],
+            arr2[i],
+            arr3[i],
+            arr4[i],
+            arr5[i],
+            arr6[i],
+            arr7[i],
+            arr8[i],
+            arr9[i],
+        )
+        result[i] = acc
+    return acc, result
+
+
 def collect_scan(
     df: pl.DataFrame | pl.LazyFrame,
     initial_accumulator: T,
@@ -390,7 +496,7 @@ def collect_scan(
             batch_result,
             *(batch_df[n].to_numpy() for n in column_names),
         )
-        results.append(pl.Series(batch_result, dtype=result_dtype))
+        results.append(pl.Series("scan", batch_result, dtype=result_dtype))
 
     result = pl.concat(results)
     return result
