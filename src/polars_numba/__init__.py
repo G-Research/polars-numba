@@ -16,7 +16,6 @@ from typing import Callable, Concatenate, TypeVar, ParamSpec, TYPE_CHECKING
 from inspect import signature, getclosurevars
 import numpy as np
 import polars as pl
-from polars.datatypes import DataType
 from numba import jit
 from numba.core.dispatcher import Dispatcher
 
