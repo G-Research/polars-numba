@@ -41,10 +41,10 @@ def test_lazy_and_not_lazy():
         ]
 
 
-def test_nulls_filtered_out():
+def test_nulls_kept_as_null():
     """
-    Rows with nulls are filtered out, but only if the columns we care about
-    have nulls!
+    Rows with nulls are not handed to the scan function, and instead converted
+    to null in the result.  But only if the columns we care about have nulls!
     """
     df = pl.DataFrame(
         {
@@ -55,6 +55,8 @@ def test_nulls_filtered_out():
     )
     assert collect_scan(df, 0.5, add_columns, pl.Float64, ["a", "b"]).to_list() == [
         31.5,
+        None,
+        None,
         134.5,
     ]
 

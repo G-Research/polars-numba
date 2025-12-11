@@ -11,9 +11,13 @@ TODO
 
 from __future__ import annotations
 
+from functools import reduce
+from inspect import signature, getclosurevars
+from operator import or_
 from types import FunctionType
 from typing import Callable, Concatenate, TypeVar, ParamSpec, TYPE_CHECKING
-from inspect import signature, getclosurevars
+
+
 import numpy as np
 import polars as pl
 from numba import jit
@@ -196,7 +200,7 @@ def _prep_args(
 
     if column_names is None:
         column_names = [p for p in signature(function).parameters.keys()][1:]
-    lazy_df = df.lazy().select_seq(*column_names).drop_nulls()
+    lazy_df = df.lazy().select_seq(*column_names)
 
     if function in _NUMBA_CACHE:
         numba_function = _NUMBA_CACHE[function]
@@ -234,6 +238,7 @@ def collect_fold(
     compiled once.
     """
     (lazy_df, numba_function, column_names) = _prep_args(df, function, column_names)
+    lazy_df = lazy_df.drop_nulls()
 
     # As an alternative to doing dispatch here, we could do the dispatch inside
     # the Numba function, which would be less verbose and duplicative. However,
@@ -315,72 +320,92 @@ def _polars_dtype_to_numpy(dtype: PolarsDataType) -> np.dtype:
 
 
 @jit(nogil=True)
-def _scanner1(numba_function, acc, result, arr1):
+def _scanner1(numba_function, acc, result, is_null, arr1):
     """Loop and fold a 1-argument function."""
     for i in range(len(arr1)):
-        acc = numba_function(acc, arr1[i])
+        acc = acc if is_null[i] else numba_function(acc, arr1[i])
         result[i] = acc
     return acc, result
 
 
 @jit(nogil=True)
-def _scanner2(numba_function, acc, result, arr1, arr2):
+def _scanner2(numba_function, acc, result, is_null, arr1, arr2):
     """Loop and fold a 2-argument function."""
     for i in range(len(arr1)):
-        acc = numba_function(acc, arr1[i], arr2[i])
+        acc = acc if is_null[i] else numba_function(acc, arr1[i], arr2[i])
         result[i] = acc
     return acc, result
 
 
 @jit(nogil=True)
-def _scanner3(numba_function, acc, result, arr1, arr2, arr3):
+def _scanner3(numba_function, acc, result, is_null, arr1, arr2, arr3):
     """Loop and fold a 3-argument function."""
     for i in range(len(arr1)):
-        acc = numba_function(acc, arr1[i], arr2[i], arr3[i])
+        acc = acc if is_null[i] else numba_function(acc, arr1[i], arr2[i], arr3[i])
         result[i] = acc
     return acc, result
 
 
 @jit(nogil=True)
-def _scanner4(numba_function, acc, result, arr1, arr2, arr3, arr4):
+def _scanner4(numba_function, acc, result, is_null, arr1, arr2, arr3, arr4):
     """Loop and fold a 4-argument function."""
     for i in range(len(arr1)):
-        acc = numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i])
+        acc = (
+            acc
+            if is_null[i]
+            else numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i])
+        )
         result[i] = acc
     return acc, result
 
 
 @jit(nogil=True)
-def _scanner5(numba_function, acc, result, arr1, arr2, arr3, arr4, arr5):
+def _scanner5(numba_function, acc, result, is_null, arr1, arr2, arr3, arr4, arr5):
     """Loop and fold a 5-argument function."""
     for i in range(len(arr1)):
-        acc = numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i])
+        acc = (
+            acc
+            if is_null[i]
+            else numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i])
+        )
         result[i] = acc
     return acc, result
 
 
 @jit(nogil=True)
-def _scanner6(numba_function, acc, result, arr1, arr2, arr3, arr4, arr5, arr6):
+def _scanner6(numba_function, acc, result, is_null, arr1, arr2, arr3, arr4, arr5, arr6):
     """Loop and fold a 6-argument function."""
     for i in range(len(arr1)):
-        acc = numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i], arr6[i])
+        acc = (
+            acc
+            if is_null[i]
+            else numba_function(
+                acc, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i], arr6[i]
+            )
+        )
         result[i] = acc
     return acc, result
 
 
 @jit(nogil=True)
-def _scanner7(numba_function, acc, result, arr1, arr2, arr3, arr4, arr5, arr6, arr7):
+def _scanner7(
+    numba_function, acc, result, is_null, arr1, arr2, arr3, arr4, arr5, arr6, arr7
+):
     """Loop and fold a 7-argument function."""
     for i in range(len(arr1)):
-        acc = numba_function(
-            acc,
-            arr1[i],
-            arr2[i],
-            arr3[i],
-            arr4[i],
-            arr5[i],
-            arr6[i],
-            arr7[i],
+        acc = (
+            acc
+            if is_null[i]
+            else numba_function(
+                acc,
+                arr1[i],
+                arr2[i],
+                arr3[i],
+                arr4[i],
+                arr5[i],
+                arr6[i],
+                arr7[i],
+            )
         )
         result[i] = acc
     return acc, result
@@ -388,20 +413,24 @@ def _scanner7(numba_function, acc, result, arr1, arr2, arr3, arr4, arr5, arr6, a
 
 @jit(nogil=True)
 def _scanner8(
-    numba_function, acc, result, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8
+    numba_function, acc, result, is_null, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8
 ):
     """Loop and fold a 8-argument function."""
     for i in range(len(arr1)):
-        acc = numba_function(
-            acc,
-            arr1[i],
-            arr2[i],
-            arr3[i],
-            arr4[i],
-            arr5[i],
-            arr6[i],
-            arr7[i],
-            arr8[i],
+        acc = (
+            acc
+            if is_null[i]
+            else numba_function(
+                acc,
+                arr1[i],
+                arr2[i],
+                arr3[i],
+                arr4[i],
+                arr5[i],
+                arr6[i],
+                arr7[i],
+                arr8[i],
+            )
         )
         result[i] = acc
     return acc, result
@@ -409,21 +438,37 @@ def _scanner8(
 
 @jit(nogil=True)
 def _scanner9(
-    numba_function, acc, result, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8, arr9
+    numba_function,
+    acc,
+    result,
+    is_null,
+    arr1,
+    arr2,
+    arr3,
+    arr4,
+    arr5,
+    arr6,
+    arr7,
+    arr8,
+    arr9,
 ):
     """Loop and fold a 9-argument function."""
     for i in range(len(arr1)):
-        acc = numba_function(
-            acc,
-            arr1[i],
-            arr2[i],
-            arr3[i],
-            arr4[i],
-            arr5[i],
-            arr6[i],
-            arr7[i],
-            arr8[i],
-            arr9[i],
+        acc = (
+            acc
+            if is_null[i]
+            else numba_function(
+                acc,
+                arr1[i],
+                arr2[i],
+                arr3[i],
+                arr4[i],
+                arr5[i],
+                arr6[i],
+                arr7[i],
+                arr8[i],
+                arr9[i],
+            )
         )
         result[i] = acc
     return acc, result
@@ -443,6 +488,10 @@ def collect_scan(
     with the values for respective columns.  The returned result is used both
     as the corresponding value for the final ``Series`` and as the accumulator
     for the next row.
+
+    If any of the selected columns have nulls on a particular row, that
+    particular row will be null in the output ``Series``, and the row will not
+    be passed to the function.
     """
     (lazy_df, numba_function, column_names) = _prep_args(df, function, column_names)
     np_dtype = _polars_dtype_to_numpy(result_dtype)
@@ -489,13 +538,21 @@ def collect_scan(
     results = []
     for batch_df in lazy_df.collect_batches(chunk_size=50_000, lazy=True):
         batch_result = np.empty((len(batch_df),), dtype=np_dtype)
+        is_null = reduce(or_, (batch_df[s].is_null() for s in batch_df.columns))
+        # This maybe isn't necessary, so should investigate later whether
+        # that's the case. But just in case, for now make sure all values have
+        # some valid data when handed to NumPy.
+        batch_df = batch_df.fill_null(strategy="zero")
         acc = scanner(
             numba_function,
             acc,
             batch_result,
+            is_null.to_numpy(),
             *(batch_df[n].to_numpy() for n in column_names),
         )
-        results.append(pl.Series("scan", batch_result, dtype=result_dtype))
+        results.append(
+            pl.Series("scan", batch_result, dtype=result_dtype).set(is_null, None)
+        )
 
     result = pl.concat(results)
     return result
