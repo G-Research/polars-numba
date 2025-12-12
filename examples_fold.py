@@ -57,20 +57,26 @@ def credit_card_balance(
     be rejected.
     """
 
-    # We pass max_allowed_balance in through the accumuluator, since for
-    # performance reasons changing a function's bound variable is not allowed.
-    def maybe_sum(acc, attempted_purchase):
-        current_balance, max_allowed_balance = acc
+    def maybe_sum(current_balance, attempted_purchase, max_allowed_balance):
         new_balance = current_balance + attempted_purchase
         if new_balance <= max_allowed_balance:
             current_balance = new_balance
-        return (current_balance, max_allowed_balance)
+        return current_balance
 
-    df = pl.DataFrame({"attempted_purchase": attempted_purchases})
-    final_balance, _ = collect_fold(
-        df, (starting_balance, max_allowed_balance), maybe_sum
+    # For performance reasons changing a function's bound variable is not
+    # allowed. So, we pass in the parameter by adding it as a column, and use a
+    # LazyFrame for that so it doesn't have to be fully in memory.
+    df = (
+        pl.DataFrame({"attempted_purchase": attempted_purchases})
+        .lazy()
+        .with_columns(max_allowed_balance=max_allowed_balance)
     )
-    return final_balance
+    return collect_fold(
+        df,
+        starting_balance,
+        maybe_sum,
+    )
+
 
 attempted_purchases = pl.Series([900, 70, -400, 60])
 final_balance = credit_card_balance(50, 1000, attempted_purchases)
