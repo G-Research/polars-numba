@@ -11,14 +11,25 @@ TODO
 
 from __future__ import annotations
 
-from types import FunctionType
-from typing import Callable, Concatenate, TypeVar, ParamSpec
+from functools import reduce
 from inspect import signature, getclosurevars
+from operator import or_
+from types import FunctionType
+from typing import Callable, Concatenate, TypeVar, ParamSpec, TYPE_CHECKING
+
+
+import numpy as np
 import polars as pl
 from numba import jit
+from numba.core.dispatcher import Dispatcher
+
+if TYPE_CHECKING:
+    from polars.datatypes import PolarsDataType
 
 T = TypeVar("T")
 P = ParamSpec("P")
+
+__all__ = ["collect_fold", "collect_scan"]
 
 
 @jit(nogil=True)
@@ -169,6 +180,37 @@ def _ensure_captured_vars_are_unchanged(function: FunctionType) -> None:
         _CAPTURED_VARS_HASHES[function] = vars_hash
 
 
+def _prep_args(
+    df: pl.DataFrame | pl.LazyFrame,
+    function: FunctionType,
+    column_names: None | list[str] = None,
+) -> tuple[pl.LazyFrame, Dispatcher, list[str]]:
+    """
+    Prepare arguments for use.
+
+        1. Convert frame to ``LazyFrame``.
+
+        2. Extract column names if necessary.
+
+        3. Validate the function and (utilizing a cache) wrap it with
+           ``numba.jit``.
+    """
+    assert isinstance(function, FunctionType)
+    _ensure_captured_vars_are_unchanged(function)
+
+    if column_names is None:
+        column_names = [p for p in signature(function).parameters.keys()][1:]
+    lazy_df = df.lazy().select_seq(*column_names)
+
+    if function in _NUMBA_CACHE:
+        numba_function = _NUMBA_CACHE[function]
+    else:
+        numba_function = jit(nogil=True)(function)
+        _NUMBA_CACHE[function] = numba_function
+
+    return (lazy_df, numba_function, column_names)
+
+
 def collect_fold(
     df: pl.DataFrame | pl.LazyFrame,
     initial_accumulator: T,
@@ -185,7 +227,7 @@ def collect_fold(
     accumulator).
 
     For each row, the accumulator will be passed in to the given function along
-    with the values for respective columns.  The result will be a new
+    with the values for respective columns.  The returned result will be a new
     accumulator used for the next row.  The final accumulator is the result of
     this function.
 
@@ -195,18 +237,8 @@ def collect_fold(
     those variables must not change over time, since the function will only be
     compiled once.
     """
-    assert isinstance(function, FunctionType)
-    _ensure_captured_vars_are_unchanged(function)
-
-    if column_names is None:
-        column_names = [p for p in signature(function).parameters.keys()][1:]
-    lazy_df = df.lazy().select_seq(*column_names).drop_nulls()
-
-    if function in _NUMBA_CACHE:
-        numba_function = _NUMBA_CACHE[function]
-    else:
-        numba_function = jit(nogil=True)(function)
-        _NUMBA_CACHE[function] = numba_function
+    (lazy_df, numba_function, column_names) = _prep_args(df, function, column_names)
+    lazy_df = lazy_df.drop_nulls()
 
     # As an alternative to doing dispatch here, we could do the dispatch inside
     # the Numba function, which would be less verbose and duplicative. However,
@@ -256,3 +288,271 @@ def collect_fold(
             numba_function, acc, *(batch_df[n].to_numpy() for n in column_names)
         )
     return acc
+
+
+_POLARS_DTYPE_TO_NUMPY = {
+    pl.Datetime: np.datetime64,
+    pl.Boolean: np.bool,
+    pl.Float32: np.float32,
+    pl.Float64: np.float64,
+    pl.Int8: np.int8,
+    pl.Int16: np.int16,
+    pl.Int32: np.int32,
+    pl.Int64: np.int64,
+    pl.Duration: np.timedelta64,
+    pl.UInt8: np.uint8,
+    pl.UInt16: np.uint16,
+    pl.UInt32: np.uint32,
+    pl.UInt64: np.uint64,
+}
+if hasattr(pl, "Float16") and hasattr(np, "float16"):
+    _POLARS_DTYPE_TO_NUMPY[pl.Float16] = np.float16
+
+
+def _polars_dtype_to_numpy(dtype: PolarsDataType) -> np.dtype:
+    """
+    Convert a Polars dtype to a NumPy dtype.
+    """
+    # TODO test both paths
+    if not isinstance(dtype, type):
+        dtype = type(dtype)
+    return _POLARS_DTYPE_TO_NUMPY[dtype]
+
+
+@jit(nogil=True)
+def _scanner1(numba_function, acc, result, is_null, arr1):
+    """Loop and fold a 1-argument function."""
+    for i in range(len(arr1)):
+        acc = acc if is_null[i] else numba_function(acc, arr1[i])
+        result[i] = acc
+    return acc, result
+
+
+@jit(nogil=True)
+def _scanner2(numba_function, acc, result, is_null, arr1, arr2):
+    """Loop and fold a 2-argument function."""
+    for i in range(len(arr1)):
+        acc = acc if is_null[i] else numba_function(acc, arr1[i], arr2[i])
+        result[i] = acc
+    return acc, result
+
+
+@jit(nogil=True)
+def _scanner3(numba_function, acc, result, is_null, arr1, arr2, arr3):
+    """Loop and fold a 3-argument function."""
+    for i in range(len(arr1)):
+        acc = acc if is_null[i] else numba_function(acc, arr1[i], arr2[i], arr3[i])
+        result[i] = acc
+    return acc, result
+
+
+@jit(nogil=True)
+def _scanner4(numba_function, acc, result, is_null, arr1, arr2, arr3, arr4):
+    """Loop and fold a 4-argument function."""
+    for i in range(len(arr1)):
+        acc = (
+            acc
+            if is_null[i]
+            else numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i])
+        )
+        result[i] = acc
+    return acc, result
+
+
+@jit(nogil=True)
+def _scanner5(numba_function, acc, result, is_null, arr1, arr2, arr3, arr4, arr5):
+    """Loop and fold a 5-argument function."""
+    for i in range(len(arr1)):
+        acc = (
+            acc
+            if is_null[i]
+            else numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i])
+        )
+        result[i] = acc
+    return acc, result
+
+
+@jit(nogil=True)
+def _scanner6(numba_function, acc, result, is_null, arr1, arr2, arr3, arr4, arr5, arr6):
+    """Loop and fold a 6-argument function."""
+    for i in range(len(arr1)):
+        acc = (
+            acc
+            if is_null[i]
+            else numba_function(
+                acc, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i], arr6[i]
+            )
+        )
+        result[i] = acc
+    return acc, result
+
+
+@jit(nogil=True)
+def _scanner7(
+    numba_function, acc, result, is_null, arr1, arr2, arr3, arr4, arr5, arr6, arr7
+):
+    """Loop and fold a 7-argument function."""
+    for i in range(len(arr1)):
+        acc = (
+            acc
+            if is_null[i]
+            else numba_function(
+                acc,
+                arr1[i],
+                arr2[i],
+                arr3[i],
+                arr4[i],
+                arr5[i],
+                arr6[i],
+                arr7[i],
+            )
+        )
+        result[i] = acc
+    return acc, result
+
+
+@jit(nogil=True)
+def _scanner8(
+    numba_function, acc, result, is_null, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8
+):
+    """Loop and fold a 8-argument function."""
+    for i in range(len(arr1)):
+        acc = (
+            acc
+            if is_null[i]
+            else numba_function(
+                acc,
+                arr1[i],
+                arr2[i],
+                arr3[i],
+                arr4[i],
+                arr5[i],
+                arr6[i],
+                arr7[i],
+                arr8[i],
+            )
+        )
+        result[i] = acc
+    return acc, result
+
+
+@jit(nogil=True)
+def _scanner9(
+    numba_function,
+    acc,
+    result,
+    is_null,
+    arr1,
+    arr2,
+    arr3,
+    arr4,
+    arr5,
+    arr6,
+    arr7,
+    arr8,
+    arr9,
+):
+    """Loop and fold a 9-argument function."""
+    for i in range(len(arr1)):
+        acc = (
+            acc
+            if is_null[i]
+            else numba_function(
+                acc,
+                arr1[i],
+                arr2[i],
+                arr3[i],
+                arr4[i],
+                arr5[i],
+                arr6[i],
+                arr7[i],
+                arr8[i],
+                arr9[i],
+            )
+        )
+        result[i] = acc
+    return acc, result
+
+
+def collect_scan(
+    df: pl.DataFrame | pl.LazyFrame,
+    initial_accumulator: T,
+    function: Callable[Concatenate[T, P], T],
+    result_dtype: PolarsDataType,
+    column_names: None | list[str] = None,
+) -> pl.Series:
+    """
+    Collect a frame into a ``Series`` by scanning it using a function.
+
+    For each row, the accumulator will be passed in to the given function along
+    with the values for respective columns.  The returned result is used both
+    as the corresponding value for the final ``Series`` and as the accumulator
+    for the next row.
+
+    If any of the selected columns have nulls on a particular row, that
+    particular row will be null in the output ``Series``, and the row will not
+    be passed to the function.
+    """
+    (lazy_df, numba_function, column_names) = _prep_args(df, function, column_names)
+    np_dtype = _polars_dtype_to_numpy(result_dtype)
+
+    match len(column_names):
+        case 0:
+            raise ValueError("You must pass in at least one column name")
+
+        case 1:
+            scanner = _scanner1
+
+        case 2:
+            scanner = _scanner2
+
+        case 3:
+            scanner = _scanner3
+
+        case 4:
+            scanner = _scanner4
+
+        case 5:
+            scanner = _scanner5
+
+        case 6:
+            scanner = _scanner6
+
+        case 7:
+            scanner = _scanner7
+
+        case 8:
+            scanner = _scanner8
+
+        case 9:
+            scanner = _scanner9
+
+        case _:
+            raise RuntimeError(
+                f"You passed in {len(column_names)} columns, but currently "
+                "only up to 9 columns are supported; if you need more, file "
+                "an issue."
+            )
+
+    acc = initial_accumulator
+    results = []
+    for batch_df in lazy_df.collect_batches(chunk_size=50_000, lazy=True):
+        batch_result = np.empty((len(batch_df),), dtype=np_dtype)
+        is_null = reduce(or_, (batch_df[s].is_null() for s in batch_df.columns))
+        # This maybe isn't necessary, so should investigate later whether
+        # that's the case. But just in case, for now make sure all values have
+        # some valid data when handed to NumPy.
+        batch_df = batch_df.fill_null(strategy="zero")
+        acc = scanner(
+            numba_function,
+            acc,
+            batch_result,
+            is_null.to_numpy(),
+            *(batch_df[n].to_numpy() for n in column_names),
+        )
+        results.append(
+            pl.Series("scan", batch_result, dtype=result_dtype).set(is_null, None)
+        )
+
+    result = pl.concat(results)
+    return result
