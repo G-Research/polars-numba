@@ -539,10 +539,12 @@ def collect_scan(
     for batch_df in lazy_df.collect_batches(chunk_size=50_000, lazy=True):
         batch_result = np.empty((len(batch_df),), dtype=np_dtype)
         is_null = reduce(or_, (batch_df[s].is_null() for s in batch_df.columns))
-        # This maybe isn't necessary, so should investigate later whether
-        # that's the case. But just in case, for now make sure all values have
-        # some valid data when handed to NumPy.
+
+        # We can't have nulls in the dataframe; NumPy has no concept of nulls.
+        # And so e.g. for an int Series, Polars will turn it into a float array
+        # with nans. This is solvable with Numba Arrow support, maybe.
         batch_df = batch_df.fill_null(strategy="zero")
+
         acc = scanner(
             numba_function,
             acc,
