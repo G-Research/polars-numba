@@ -77,6 +77,10 @@ final_balance = df.select(
 # above 1000:
 assert final_balance == 50 + 900 - 400 + 60
 
+
+###################################################
+### Calculating a credit card balance, per user ###
+
 df = pl.DataFrame(
     {
         "user": ["bob", "alice", "alice", "alice", "alice", "alice", "bob"],
