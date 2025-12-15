@@ -24,7 +24,6 @@ from numba import jit
 from numba.core.dispatcher import Dispatcher
 
 if TYPE_CHECKING:
-    from polars import Expr
     from polars.datatypes import PolarsDataType
 
 T = TypeVar("T")
@@ -318,12 +317,12 @@ def collect_fold(
 
 
 def fold(
-    expr: Expr,
+    expr: pl.Expr,
     initial_accumulator: T,
     function: Callable[Concatenate[T, P], T],
     return_dtype: PolarsDataType,
     struct_column_names: None | list[str] = None,
-) -> Expr:
+) -> pl.Expr:
     """
     Collect an expression into a literal value by folding it using a function.
 
@@ -331,8 +330,8 @@ def fold(
 
     To support multiple arguments, you can use ``pl.struct()`` to combine
     multiple columns into a ``Struct``.  The column names should be passed in
-    via ``struct_column_names``, or they will be deduced from the function name
-    if you don't pass them in.
+    via ``struct_column_names``, or they will be deduced from the function
+    arguments if you don't pass them in.
 
     Streaming is NOT used, so memory usage may be high.
 
@@ -340,13 +339,13 @@ def fold(
     """
     numba_function = _compile_function(function)
 
-    def handle_data(df: pl.DataFrame) -> T:
-        assert len(df.columns) == 1
-        if (series := df[df.columns[0]].dtype) == pl.Struct:
+    def handle_data(series: pl.Series) -> T:
+        if series.dtype == pl.Struct:
             df = series.struct.unnest()
             column_names = _get_column_names(function, struct_column_names)
         else:
-            column_names = df.columns
+            df = pl.DataFrame({"fold": series})
+            column_names = ["fold"]
         df = df.select(**{name: name for name in column_names}).drop_nulls()
         folder = _get_folder(len(column_names))
         return folder(
@@ -631,3 +630,21 @@ def collect_scan(
 
     result = pl.concat(results)
     return result
+
+
+@pl.api.register_expr_namespace("plumba")
+class _PolarsNumbaExprNamespace:
+    def __init__(self, expr: pl.Expr) -> None:
+        self._expr = expr
+
+    def fold(
+        self,
+        initial_accumulator: T,
+        function: Callable[Concatenate[T, P], T],
+        return_dtype: PolarsDataType,
+        struct_column_names: None | list[str] = None,
+    ) -> pl.Expr:
+        """See documentation for ``fold()``."""
+        return fold(
+            self._expr, initial_accumulator, function, return_dtype, struct_column_names
+        )

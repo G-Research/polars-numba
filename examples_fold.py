@@ -5,8 +5,8 @@ Examples of using ``collect_fold()``.
 from datetime import date
 
 import polars as pl
+import polars_numba as _  # registers the plumba expr namespace
 
-from polars_numba import collect_fold
 
 #############################################
 ### Longest streak of days below freezing ###
@@ -33,12 +33,16 @@ def freezing_streak(acc, max_temp):
     return (prev_max_streak, cur_days)
 
 
-streak, _ = collect_fold(df, (0, 0), freezing_streak, ["max_temp"])
-assert streak == 3
-
-# Since the argument name to the function is the same as the column name, we
-# don't actually have to specificy column names:
-streak, _ = collect_fold(df, (0, 0), freezing_streak)
+streak = df.select(
+    pl.col("max_temp").plumba.fold(
+        (0, 0),
+        freezing_streak,
+        # TODO this is... super verbose
+        pl.Struct(
+            [pl.Field("prev_max_streak", pl.Int64), pl.Field("cur_days", pl.Int64)]
+        )
+    )
+).item()["prev_max_streak"]
 assert streak == 3
 
 
@@ -64,18 +68,17 @@ def credit_card_balance(
         return current_balance
 
     # For performance reasons changing a function's bound variable is not
-    # allowed. So, we pass in the parameter by adding it as a column, and use a
-    # LazyFrame for that so it doesn't have to be fully in memory.
+    # allowed. So, we pass in the parameter by adding it as a column.
+    # TODO fold() should probably accept extra arguments!
     df = (
         pl.DataFrame({"attempted_purchase": attempted_purchases})
-        .lazy()
         .with_columns(max_allowed_balance=max_allowed_balance)
     )
-    return collect_fold(
-        df,
-        starting_balance,
-        maybe_sum,
-    )
+    return df.select(
+        pl.struct("attempted_purchase", "max_allowed_balance").plumba.fold(
+            starting_balance, maybe_sum, pl.Float64
+        )
+    ).item()
 
 
 attempted_purchases = pl.Series([900, 70, -400, 60])
