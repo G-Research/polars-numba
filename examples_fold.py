@@ -46,7 +46,7 @@ assert streak == 3
 
 # TODO this doesn't work well with group_by, so refactor and change fold() as needed...
 def credit_card_balance(
-    attempted_purchases: pl.Expr, starting_balance: float, max_allowed_balance: float
+    attempted_purchases: pl.Expr, *, starting_balance: float, max_allowed_balance: float
 ) -> pl.Expr:
     """
     Given a series of attempted purchase amounts, a starting balance, and a
@@ -56,27 +56,23 @@ def credit_card_balance(
     be rejected.
     """
 
-    def maybe_sum(current_balance, attempted_purchase, max_allowed_balance):
+    def maybe_sum(current_balance, max_allowed_balance, attempted_purchase):
         new_balance = current_balance + attempted_purchase
         if new_balance <= max_allowed_balance:
             current_balance = new_balance
         return current_balance
 
-    # For performance reasons changing a function's bound variable is not
-    # allowed. So, we pass in the parameter by adding it as a column.
-    # TODO fold() should probably accept extra arguments!
-    df = pl.DataFrame({"attempted_purchase": attempted_purchases}).with_columns(
-        max_allowed_balance=max_allowed_balance
+    return attempted_purchases.plumba.fold(
+        starting_balance, maybe_sum, pl.Float64, extra_args=[max_allowed_balance],
     )
-    return df.select(
-        pl.struct("attempted_purchase", "max_allowed_balance").plumba.fold(
-            starting_balance, maybe_sum, pl.Float64
-        )
-    ).item()
 
 
-attempted_purchases = pl.Series([900, 70, -400, 60])
-final_balance = credit_card_balance(attempted_purchases, 50, 1000)
+df = pl.DataFrame({"attempted_purchases": pl.Series([900, 70, -400, 60])})
+final_balance = df.select(
+    pl.col("attempted_purchases").pipe(
+        credit_card_balance, starting_balance=50, max_allowed_balance=1000
+    )
+).item()
 # We expect the 70 purchase to be rejected because it will take the balance
 # above 1000:
 assert final_balance == 50 + 900 - 400 + 60
