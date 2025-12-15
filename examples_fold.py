@@ -44,9 +44,8 @@ assert streak == 3
 ### Calculating a credit card balance ###
 
 
-# TODO this doesn't work well with group_by, so refactor and change fold() as needed...
 def credit_card_balance(
-    attempted_purchases: pl.Expr, *, starting_balance: float, max_allowed_balance: float
+    attempted_purchases: pl.Expr, max_allowed_balance: float
 ) -> pl.Expr:
     """
     Given a series of attempted purchase amounts, a starting balance, and a
@@ -63,16 +62,35 @@ def credit_card_balance(
         return current_balance
 
     return attempted_purchases.plumba.fold(
-        starting_balance, maybe_sum, pl.Float64, extra_args=[max_allowed_balance],
-    )
+        0.0,
+        maybe_sum,
+        pl.Float64,
+        extra_args=[max_allowed_balance],
+    ).alias("balance")
 
 
-df = pl.DataFrame({"attempted_purchases": pl.Series([900, 70, -400, 60])})
+df = pl.DataFrame({"attempted_purchases": [50, 900, 70, -400, 60]})
 final_balance = df.select(
-    pl.col("attempted_purchases").pipe(
-        credit_card_balance, starting_balance=50, max_allowed_balance=1000
-    )
+    pl.col("attempted_purchases").pipe(credit_card_balance, max_allowed_balance=1000)
 ).item()
 # We expect the 70 purchase to be rejected because it will take the balance
 # above 1000:
 assert final_balance == 50 + 900 - 400 + 60
+
+df = pl.DataFrame(
+    {
+        "user": ["bob", "alice", "alice", "alice", "alice", "alice", "bob"],
+        "attempted_purchase": [17.0, 50.0, 900.0, 70.0, -400.0, 60.0, 0.5],
+    }
+)
+final_balance = (
+    df.group_by("user")
+    .agg(
+        pl.col("attempted_purchase").pipe(credit_card_balance, max_allowed_balance=1000)
+    )
+    .sort("user")
+)
+assert final_balance.to_dict(as_series=False) == {
+    "user": ["alice", "bob"],
+    "balance": [610.0, 17.5],
+}
