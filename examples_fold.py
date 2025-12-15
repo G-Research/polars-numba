@@ -46,11 +46,11 @@ assert streak == 3
 
 # TODO this doesn't work well with group_by, so refactor and change fold() as needed...
 def credit_card_balance(
-    starting_balance: float, max_allowed_balance: float, attempted_purchases: pl.Series
-) -> float:
+    attempted_purchases: pl.Expr, starting_balance: float, max_allowed_balance: float
+) -> pl.Expr:
     """
-    Given a starting balance, a maximum allowed balance, and a series of
-    attempted purchase amounts, return the final balance.
+    Given a series of attempted purchase amounts, a starting balance, and a
+    maximum allowed balance, return the final balance.
 
     Any purchase that takes the balance above the maximum allowed balance will
     be rejected.
@@ -76,7 +76,7 @@ def credit_card_balance(
 
 
 attempted_purchases = pl.Series([900, 70, -400, 60])
-final_balance = credit_card_balance(50, 1000, attempted_purchases)
+final_balance = credit_card_balance(attempted_purchases, 50, 1000)
 # We expect the 70 purchase to be rejected because it will take the balance
 # above 1000:
 assert final_balance == 50 + 900 - 400 + 60

@@ -321,7 +321,6 @@ def fold(
     initial_accumulator: T,
     function: Callable[Concatenate[T, P], T],
     return_dtype: PolarsDataType,
-    struct_column_names: None | list[str] = None,
 ) -> pl.Expr:
     """
     Collect an expression into a literal value by folding it using a function.
@@ -329,9 +328,8 @@ def fold(
     Nulls will be dropped before the function is called.
 
     To support multiple arguments, you can use ``pl.struct()`` to combine
-    multiple columns into a ``Struct``.  The column names should be passed in
-    via ``struct_column_names``, or they will be deduced from the function
-    arguments if you don't pass them in.
+    multiple columns into a ``Struct``.  The struct columns should be in the
+    order you wish to pass to the function.
 
     Streaming is NOT used, so memory usage may be high.
 
@@ -342,11 +340,11 @@ def fold(
     def handle_data(series: pl.Series) -> T:
         if series.dtype == pl.Struct:
             df = series.struct.unnest()
-            column_names = _get_column_names(function, struct_column_names)
+            column_names = _get_column_names(function, None)
         else:
             df = pl.DataFrame({"fold": series})
             column_names = ["fold"]
-        df = df.select(**{name: name for name in column_names}).drop_nulls()
+        df = df.drop_nulls()
         folder = _get_folder(len(column_names))
         return folder(
             numba_function,
@@ -642,9 +640,6 @@ class _PolarsNumbaExprNamespace:
         initial_accumulator: T,
         function: Callable[Concatenate[T, P], T],
         return_dtype: PolarsDataType,
-        struct_column_names: None | list[str] = None,
     ) -> pl.Expr:
         """See documentation for ``fold()``."""
-        return fold(
-            self._expr, initial_accumulator, function, return_dtype, struct_column_names
-        )
+        return fold(self._expr, initial_accumulator, function, return_dtype)
