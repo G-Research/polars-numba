@@ -23,26 +23,20 @@ df = pl.DataFrame(
 
 # We want to know the longest numbers of days in a row that the temperature was
 # zero or below:
-def freezing_streak(acc, max_temp):
-    (prev_max_streak, cur_days) = acc
-    if max_temp <= 0:
-        cur_days += 1
-    else:
-        cur_days = 0
-    prev_max_streak = max(prev_max_streak, cur_days)
-    return (prev_max_streak, cur_days)
+def freezing_streak(expr: pl.Expr) -> pl.Expr:
+    def impl(acc, max_temp):
+        (prev_max_streak, cur_days) = acc
+        if max_temp <= 0:
+            cur_days += 1
+        else:
+            cur_days = 0
+        prev_max_streak = max(prev_max_streak, cur_days)
+        return (prev_max_streak, cur_days)
+
+    return expr.plumba.fold((0, 0), impl, pl.Array(pl.Int64, 2)).arr.first()
 
 
-streak = df.select(
-    pl.col("max_temp").plumba.fold(
-        (0, 0),
-        freezing_streak,
-        # TODO this is... super verbose
-        pl.Struct(
-            [pl.Field("prev_max_streak", pl.Int64), pl.Field("cur_days", pl.Int64)]
-        )
-    )
-).item()["prev_max_streak"]
+streak = df.select(pl.col("max_temp").pipe(freezing_streak)).item()
 assert streak == 3
 
 
@@ -50,6 +44,7 @@ assert streak == 3
 ### Calculating a credit card balance ###
 
 
+# TODO this doesn't work well with group_by, so refactor and change fold() as needed...
 def credit_card_balance(
     starting_balance: float, max_allowed_balance: float, attempted_purchases: pl.Series
 ) -> float:
@@ -70,9 +65,8 @@ def credit_card_balance(
     # For performance reasons changing a function's bound variable is not
     # allowed. So, we pass in the parameter by adding it as a column.
     # TODO fold() should probably accept extra arguments!
-    df = (
-        pl.DataFrame({"attempted_purchase": attempted_purchases})
-        .with_columns(max_allowed_balance=max_allowed_balance)
+    df = pl.DataFrame({"attempted_purchase": attempted_purchases}).with_columns(
+        max_allowed_balance=max_allowed_balance
     )
     return df.select(
         pl.struct("attempted_purchase", "max_allowed_balance").plumba.fold(
