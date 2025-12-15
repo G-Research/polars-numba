@@ -20,7 +20,7 @@ $ pip install git+https://github.com/g-research/polars-numba.git
 
 Or add package `git+https://github.com/g-research/polars-numba.git` as a dependency to your `requirements.txt`/`pyproject.toml`/etc..
 
-## Folding with `collect_fold()`
+## Streaming folding with `collect_fold()`
 
 The first API provided by `polars_numba` is folding.
 
@@ -32,7 +32,7 @@ The final result is the result of the function.
 Data is processed in batches, using the streaming engine, so memory usage should be constrained.
 The passed in fold function is compiled with Numba, so runtime should be fast (though the first call for any combination of functions and types will need to be compiled, which adds some fixed overhead).
 
-You can see examples in [`examples_fold.py`](examples_fold.py).
+You can see examples in [`examples_collect_fold.py`](examples_collect_fold.py).
 
 ## Scanning with `collect_scan()`
 
