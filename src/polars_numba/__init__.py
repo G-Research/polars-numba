@@ -86,6 +86,7 @@ def _folder7(numba_function, acc, extra_args, arr1, arr2, arr3, arr4, arr5, arr6
     for i in range(len(arr1)):
         acc = numba_function(
             acc,
+            *extra_args,
             arr1[i],
             arr2[i],
             arr3[i],
@@ -103,6 +104,7 @@ def _folder8(numba_function, acc, extra_args, arr1, arr2, arr3, arr4, arr5, arr6
     for i in range(len(arr1)):
         acc = numba_function(
             acc,
+            *extra_args,
             arr1[i],
             arr2[i],
             arr3[i],
@@ -121,6 +123,7 @@ def _folder9(numba_function, acc, extra_args, arr1, arr2, arr3, arr4, arr5, arr6
     for i in range(len(arr1)):
         acc = numba_function(
             acc,
+            *extra_args,
             arr1[i],
             arr2[i],
             arr3[i],
@@ -321,7 +324,7 @@ def fold(
     initial_accumulator: T,
     function: Callable[Concatenate[T, P], T],
     return_dtype: PolarsDataType,
-    extra_args: Sequence[Any],
+    extra_args: Sequence[Any] = (),
 ) -> pl.Expr:
     """
     Collect an expression into a literal value by folding it using a function.
@@ -345,7 +348,7 @@ def fold(
     def handle_data(series: pl.Series) -> T:
         if series.dtype == pl.Struct:
             df = series.struct.unnest()
-            column_names = _get_column_names(function, None)
+            column_names = df.columns
         else:
             df = pl.DataFrame({"fold": series})
             column_names = ["fold"]
