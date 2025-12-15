@@ -20,30 +20,51 @@ $ pip install git+https://github.com/g-research/polars-numba.git
 
 Or add package `git+https://github.com/g-research/polars-numba.git` as a dependency to your `requirements.txt`/`pyproject.toml`/etc..
 
-## Streaming folding with `collect_fold()`
+## Folding
 
-The first API provided by `polars_numba` is folding.
-
-Given a `DataFrame` or `LazyFrame`, you can use `polars_numba.collect_fold()` to run a fold on the data.
 A fold is a function that takes an accumulator and the values of specific columns.
 It returns a new accumulator, which is passed on to the next call.
 The final result is the result of the function.
 
+### `Expr`-based folding
+
+While not supporting streaming, so potentially with high memory usage, `Expr.plumba.fold()` can work with arbitrary `Expr`.
+This provides lots of flexibility, e.g. it's usable with `group_by()`.
+Just make sure to import the package so the custom namespace gets installed.
+
+You can see examples in [`examples_fold.py`](examples_fold.py).
+
+### Streaming folding with `collect_fold()`
+
+Given a `DataFrame` or `LazyFrame`, you can use `polars_numba.collect_fold()` to run a fold on the data.
 Data is processed in batches, using the streaming engine, so memory usage should be constrained.
-The passed in fold function is compiled with Numba, so runtime should be fast (though the first call for any combination of functions and types will need to be compiled, which adds some fixed overhead).
 
 You can see examples in [`examples_collect_fold.py`](examples_collect_fold.py).
 
-## Scanning with `collect_scan()`
+## Scanning
 
-The second API provided by `polars_numba` is scanning (in the functional programming usage).
-
-Given a `DataFrame` or `LazyFrame`, you can use `polars_numba.collect_scan()` to run a scan on the data.
+The second set of APIs provided by `polars_numba` is scanning (in the functional programming usage).
 A scan is a function that takes an accumulator and the values of specific columns.
 It returns a new accumulator, which is used as the value for a row in the result and also passed on to the next call.
 The final result is a `Series`, the result of all the scan calls.
 
-Data is processed in batches, using the streaming engine, so memory usage should be constrained, though the final `Series` is fully in memory.
-As with the fold, the passed in scan function is compiled with Numba.
+### `Expr`-based scanning (TODO)
+
+`Expr.numba.scan()` can work with any `Expr` to do a scan.
 
 You can see examples in [`examples_scan.py`](examples_scan.py).
+
+### Streaming scanning with `collect_scan()`
+
+Given a `DataFrame` or `LazyFrame`, you can use `polars_numba.collect_scan()` to run a scan on the data.
+Data is processed in batches, using the streaming engine, so memory usage should be constrained, though the final `Series` is fully in memory.
+
+You can see examples in [`examples_collect_scan.py`](examples_collect_scan.py).
+
+## General features
+
+The functions passed in to folds or scans are compiled with Numba, so runtime should be fast.
+The caveats:
+
+* The first call for any combination of functions and types will need to be compiled, which adds some fixed overhead; still worth it for large amounts of data.
+* Numba only implements a subset of Python, with some limitations, but it is still very flexible.
