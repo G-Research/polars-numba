@@ -426,67 +426,77 @@ def _polars_dtype_to_numpy(dtype: PolarsDataType) -> np.dtype:
 
 
 @jit(nogil=True)
-def _scanner1(numba_function, acc, result, is_null, arr1):
+def _scanner1(numba_function, acc, extra_args, result, is_null, arr1):
     """Loop and fold a 1-argument function."""
     for i in range(len(arr1)):
-        acc = acc if is_null[i] else numba_function(acc, arr1[i])
+        acc = acc if is_null[i] else numba_function(acc, *extra_args, arr1[i])
         result[i] = acc
     return acc, result
 
 
 @jit(nogil=True)
-def _scanner2(numba_function, acc, result, is_null, arr1, arr2):
+def _scanner2(numba_function, acc, extra_args, result, is_null, arr1, arr2):
     """Loop and fold a 2-argument function."""
     for i in range(len(arr1)):
-        acc = acc if is_null[i] else numba_function(acc, arr1[i], arr2[i])
+        acc = acc if is_null[i] else numba_function(acc, *extra_args, arr1[i], arr2[i])
         result[i] = acc
     return acc, result
 
 
 @jit(nogil=True)
-def _scanner3(numba_function, acc, result, is_null, arr1, arr2, arr3):
+def _scanner3(numba_function, acc, extra_args, result, is_null, arr1, arr2, arr3):
     """Loop and fold a 3-argument function."""
     for i in range(len(arr1)):
-        acc = acc if is_null[i] else numba_function(acc, arr1[i], arr2[i], arr3[i])
+        acc = (
+            acc
+            if is_null[i]
+            else numba_function(acc, *extra_args, arr1[i], arr2[i], arr3[i])
+        )
         result[i] = acc
     return acc, result
 
 
 @jit(nogil=True)
-def _scanner4(numba_function, acc, result, is_null, arr1, arr2, arr3, arr4):
+def _scanner4(numba_function, acc, extra_args, result, is_null, arr1, arr2, arr3, arr4):
     """Loop and fold a 4-argument function."""
     for i in range(len(arr1)):
         acc = (
             acc
             if is_null[i]
-            else numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i])
+            else numba_function(acc, *extra_args, arr1[i], arr2[i], arr3[i], arr4[i])
         )
         result[i] = acc
     return acc, result
 
 
 @jit(nogil=True)
-def _scanner5(numba_function, acc, result, is_null, arr1, arr2, arr3, arr4, arr5):
+def _scanner5(
+    numba_function, acc, extra_args, result, is_null, arr1, arr2, arr3, arr4, arr5
+):
     """Loop and fold a 5-argument function."""
     for i in range(len(arr1)):
         acc = (
             acc
             if is_null[i]
-            else numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i])
+            else numba_function(
+                acc, *extra_args, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i]
+            )
         )
         result[i] = acc
     return acc, result
 
 
 @jit(nogil=True)
-def _scanner6(numba_function, acc, result, is_null, arr1, arr2, arr3, arr4, arr5, arr6):
+def _scanner6(
+    numba_function, acc, extra_args, result, is_null, arr1, arr2, arr3, arr4, arr5, arr6
+):
     """Loop and fold a 6-argument function."""
     for i in range(len(arr1)):
         acc = (
             acc
             if is_null[i]
             else numba_function(
-                acc, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i], arr6[i]
+                acc, *extra_args, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i], arr6[i]
             )
         )
         result[i] = acc
@@ -495,7 +505,18 @@ def _scanner6(numba_function, acc, result, is_null, arr1, arr2, arr3, arr4, arr5
 
 @jit(nogil=True)
 def _scanner7(
-    numba_function, acc, result, is_null, arr1, arr2, arr3, arr4, arr5, arr6, arr7
+    numba_function,
+    acc,
+    extra_args,
+    result,
+    is_null,
+    arr1,
+    arr2,
+    arr3,
+    arr4,
+    arr5,
+    arr6,
+    arr7,
 ):
     """Loop and fold a 7-argument function."""
     for i in range(len(arr1)):
@@ -504,6 +525,7 @@ def _scanner7(
             if is_null[i]
             else numba_function(
                 acc,
+                *extra_args,
                 arr1[i],
                 arr2[i],
                 arr3[i],
@@ -519,7 +541,19 @@ def _scanner7(
 
 @jit(nogil=True)
 def _scanner8(
-    numba_function, acc, result, is_null, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8
+    numba_function,
+    acc,
+    extra_args,
+    result,
+    is_null,
+    arr1,
+    arr2,
+    arr3,
+    arr4,
+    arr5,
+    arr6,
+    arr7,
+    arr8,
 ):
     """Loop and fold a 8-argument function."""
     for i in range(len(arr1)):
@@ -528,6 +562,7 @@ def _scanner8(
             if is_null[i]
             else numba_function(
                 acc,
+                *extra_args,
                 arr1[i],
                 arr2[i],
                 arr3[i],
@@ -546,6 +581,7 @@ def _scanner8(
 def _scanner9(
     numba_function,
     acc,
+    extra_args,
     result,
     is_null,
     arr1,
@@ -565,6 +601,7 @@ def _scanner9(
             if is_null[i]
             else numba_function(
                 acc,
+                *extra_args,
                 arr1[i],
                 arr2[i],
                 arr3[i],
@@ -580,29 +617,11 @@ def _scanner9(
     return acc, result
 
 
-def collect_scan(
-    df: pl.DataFrame | pl.LazyFrame,
-    initial_accumulator: T,
-    function: Callable[Concatenate[T, P], T],
-    result_dtype: PolarsDataType,
-    column_names: None | list[str] = None,
-) -> pl.Series:
+def _get_scanner(num_args: int) -> Dispatcher:
     """
-    Collect a frame into a ``Series`` by scanning it using a function.
-
-    For each row, the accumulator will be passed in to the given function along
-    with the values for respective columns.  The returned result is used both
-    as the corresponding value for the final ``Series`` and as the accumulator
-    for the next row.
-
-    If any of the selected columns have nulls on a particular row, that
-    particular row will be null in the output ``Series``, and the row will not
-    be passed to the function.
+    Get the scanner function for the given number of arguments.
     """
-    (lazy_df, numba_function, column_names) = _prep_for_df(df, function, column_names)
-    np_dtype = _polars_dtype_to_numpy(result_dtype)
-
-    match len(column_names):
+    match num_args:
         case 0:
             raise ValueError("You must pass in at least one column name")
 
@@ -635,10 +654,35 @@ def collect_scan(
 
         case _:
             raise RuntimeError(
-                f"You passed in {len(column_names)} columns, but currently "
+                f"You passed in {num_args} columns, but currently "
                 "only up to 9 columns are supported; if you need more, file "
                 "an issue."
             )
+    return scanner
+
+
+def collect_scan(
+    df: pl.DataFrame | pl.LazyFrame,
+    initial_accumulator: T,
+    function: Callable[Concatenate[T, P], T],
+    result_dtype: PolarsDataType,
+    column_names: None | list[str] = None,
+) -> pl.Series:
+    """
+    Collect a frame into a ``Series`` by scanning it using a function.
+
+    For each row, the accumulator will be passed in to the given function along
+    with the values for respective columns.  The returned result is used both
+    as the corresponding value for the final ``Series`` and as the accumulator
+    for the next row.
+
+    If any of the selected columns have nulls on a particular row, that
+    particular row will be null in the output ``Series``, and the row will not
+    be passed to the function.
+    """
+    (lazy_df, numba_function, column_names) = _prep_for_df(df, function, column_names)
+    np_dtype = _polars_dtype_to_numpy(result_dtype)
+    scanner = _get_scanner(len(column_names))
 
     acc = initial_accumulator
     results = []
@@ -651,9 +695,10 @@ def collect_scan(
         # with nans. This is solvable with Numba Arrow support, maybe.
         batch_df = batch_df.fill_null(strategy="zero")
 
-        acc = scanner(
+        scanner(
             numba_function,
             acc,
+            (),
             batch_result,
             is_null.to_numpy(),
             *(batch_df[n].to_numpy() for n in column_names),
@@ -664,6 +709,63 @@ def collect_scan(
 
     result = pl.concat(results)
     return result
+
+
+def scan(
+    expr: pl.Expr,
+    function: Callable[Concatenate[T, P], T],
+    initial_accumulator: T,
+    return_dtype: PolarsDataType,
+    extra_args: Sequence[Any] = (),
+) -> pl.Expr:
+    """
+    Collect an expression into a `Series` by scanning it using a function.
+
+    Nulls will result in the correponding row being a null, and that row will
+    not be passed to the given function.
+
+    To support multiple arguments, you can use ``pl.struct()`` to combine
+    multiple columns into a ``Struct``.  The struct columns should be in the
+    order you wish to pass to the function.
+
+    Streaming is NOT used, so memory usage may be high.
+
+    ``**extra_args`` allows passing in additional constants to the called
+    function, in the order they were passed in; they will be passed in at the
+    end of the arguments.
+
+    See ``collect_scan()`` for other details.
+    """
+    numba_function = _compile_function(function)
+    np_dtype = _polars_dtype_to_numpy(return_dtype)
+
+    def handle_data(series: pl.Series) -> T:
+        if series.dtype == pl.Struct:
+            df = series.struct.unnest()
+            column_names = df.columns
+        else:
+            df = pl.DataFrame({"fold": series})
+            column_names = ["fold"]
+        is_null = reduce(or_, (df[s].is_null() for s in df.columns))
+        result = np.empty((len(df),), dtype=np_dtype)
+        df = df.drop_nulls()
+        scanner = _get_scanner(len(column_names))
+        scanner(
+            numba_function,
+            initial_accumulator,
+            tuple(extra_args),
+            result,
+            is_null.to_numpy(),
+            *(df[n].to_numpy() for n in column_names),
+        )
+        return pl.Series(series.name, result, dtype=return_dtype).set(is_null, None)
+
+    return expr.map_batches(
+        handle_data,
+        is_elementwise=False,
+        returns_scalar=False,
+        return_dtype=return_dtype,
+    )
 
 
 @pl.api.register_expr_namespace("plumba")
@@ -680,5 +782,15 @@ class _PolarsNumbaExprNamespace:
     ) -> pl.Expr:
         return fold(self._expr, function, initial_accumulator, return_dtype, extra_args)
 
+    def scan(
+        self,
+        function: Callable[Concatenate[T, P], T],
+        initial_accumulator: T,
+        return_dtype: PolarsDataType,
+        extra_args: Sequence[Any] = (),
+    ) -> pl.Expr:
+        return scan(self._expr, function, initial_accumulator, return_dtype, extra_args)
+
 
 _PolarsNumbaExprNamespace.fold.__doc__ = fold.__doc__
+_PolarsNumbaExprNamespace.scan.__doc__ = scan.__doc__
