@@ -748,7 +748,7 @@ def scan(
             column_names = ["fold"]
         is_null = reduce(or_, (df[s].is_null() for s in df.columns))
         result = np.empty((len(df),), dtype=np_dtype)
-        df = df.drop_nulls()
+        df = df.fill_null(strategy="zero")
         scanner = _get_scanner(len(column_names))
         scanner(
             numba_function,
