@@ -48,9 +48,9 @@ A scan is a function that takes an accumulator and the values of specific column
 It returns a new accumulator, which is used as the value for a row in the result and also passed on to the next call.
 The final result is a `Series`, the result of all the scan calls.
 
-### `Expr`-based scanning (TODO)
+### `Expr`-based scanning
 
-`Expr.numba.scan()` can work with any `Expr` to do a scan.
+`Expr.plumba.scan()` can work with any `Expr` to do a scan.
 
 You can see examples in [`examples_scan.py`](examples_scan.py).
 
