@@ -678,5 +678,7 @@ class _PolarsNumbaExprNamespace:
         return_dtype: PolarsDataType,
         extra_args: Sequence[Any] = (),
     ) -> pl.Expr:
-        """See documentation for ``fold()``."""
         return fold(self._expr, function, initial_accumulator, return_dtype, extra_args)
+
+
+_PolarsNumbaExprNamespace.fold.__doc__ = fold.__doc__
