@@ -1,11 +1,11 @@
 """
-Examples of using ``collect_fold()``.
+Examples of using ``Expr.plumba.fold()``.
 """
 
 from datetime import date
 
 import polars as pl
-import polars_numba as _  # registers the plumba expr namespace
+import polars_numba  # noqa: F401
 
 
 #############################################
@@ -33,7 +33,7 @@ def freezing_streak(expr: pl.Expr) -> pl.Expr:
         prev_max_streak = max(prev_max_streak, cur_days)
         return (prev_max_streak, cur_days)
 
-    return expr.plumba.fold((0, 0), impl, pl.Array(pl.Int64, 2)).arr.first()
+    return expr.plumba.fold(impl, (0, 0), pl.Array(pl.Int64, 2)).arr.first()
 
 
 streak = df.select(pl.col("max_temp").pipe(freezing_streak)).item()
@@ -62,10 +62,7 @@ def credit_card_balance(
         return current_balance
 
     return attempted_purchases.plumba.fold(
-        0.0,
-        maybe_sum,
-        pl.Float64,
-        extra_args=[max_allowed_balance],
+        maybe_sum, 0.0, pl.Float64, extra_args=[max_allowed_balance]
     ).alias("balance")
 
 

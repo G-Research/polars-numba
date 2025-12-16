@@ -25,7 +25,6 @@ series = collect_scan(df, 0, highest_so_far, pl.UInt64)
 assert series.to_list() == [20, 20, 21, 22, 23, 23, 23, 24, 25]
 
 
-
 #################################################
 ### Calculating a running credit card balance ###
 
@@ -55,12 +54,7 @@ def credit_card_balance(
         .lazy()
         .with_columns(max_allowed_balance=max_allowed_balance)
     )
-    return collect_scan(
-        df,
-        starting_balance,
-        maybe_sum,
-        pl.Float64
-    )
+    return collect_scan(df, starting_balance, maybe_sum, pl.Float64)
 
 
 attempted_purchases = pl.Series([900, 70, -400, 60])

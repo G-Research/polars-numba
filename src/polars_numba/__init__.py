@@ -15,7 +15,15 @@ from functools import reduce
 from inspect import signature, getclosurevars
 from operator import or_
 from types import FunctionType
-from typing import Any, Callable, Concatenate, TypeVar, ParamSpec, Sequence, TYPE_CHECKING
+from typing import (
+    Any,
+    Callable,
+    Concatenate,
+    TypeVar,
+    ParamSpec,
+    Sequence,
+    TYPE_CHECKING,
+)
 
 
 import numpy as np
@@ -68,7 +76,9 @@ def _folder4(numba_function, acc, extra_args, arr1, arr2, arr3, arr4):
 def _folder5(numba_function, acc, extra_args, arr1, arr2, arr3, arr4, arr5):
     """Loop and fold a 5-argument function."""
     for i in range(len(arr1)):
-        acc = numba_function(acc, *extra_args, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i])
+        acc = numba_function(
+            acc, *extra_args, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i]
+        )
     return acc
 
 
@@ -76,7 +86,9 @@ def _folder5(numba_function, acc, extra_args, arr1, arr2, arr3, arr4, arr5):
 def _folder6(numba_function, acc, extra_args, arr1, arr2, arr3, arr4, arr5, arr6):
     """Loop and fold a 6-argument function."""
     for i in range(len(arr1)):
-        acc = numba_function(acc, *extra_args, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i], arr6[i])
+        acc = numba_function(
+            acc, *extra_args, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i], arr6[i]
+        )
     return acc
 
 
@@ -99,7 +111,9 @@ def _folder7(numba_function, acc, extra_args, arr1, arr2, arr3, arr4, arr5, arr6
 
 
 @jit(nogil=True)
-def _folder8(numba_function, acc, extra_args, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8):
+def _folder8(
+    numba_function, acc, extra_args, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8
+):
     """Loop and fold a 8-argument function."""
     for i in range(len(arr1)):
         acc = numba_function(
@@ -118,7 +132,20 @@ def _folder8(numba_function, acc, extra_args, arr1, arr2, arr3, arr4, arr5, arr6
 
 
 @jit(nogil=True)
-def _folder9(numba_function, acc, extra_args, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8, arr9):
+def _folder9(
+    numba_function,
+    acc,
+    extra_args,
+    arr1,
+    arr2,
+    arr3,
+    arr4,
+    arr5,
+    arr6,
+    arr7,
+    arr8,
+    arr9,
+):
     """Loop and fold a 9-argument function."""
     for i in range(len(arr1)):
         acc = numba_function(
@@ -321,8 +348,8 @@ def collect_fold(
 
 def fold(
     expr: pl.Expr,
-    initial_accumulator: T,
     function: Callable[Concatenate[T, P], T],
+    initial_accumulator: T,
     return_dtype: PolarsDataType,
     extra_args: Sequence[Any] = (),
 ) -> pl.Expr:
@@ -646,12 +673,10 @@ class _PolarsNumbaExprNamespace:
 
     def fold(
         self,
-        initial_accumulator: T,
         function: Callable[Concatenate[T, P], T],
+        initial_accumulator: T,
         return_dtype: PolarsDataType,
         extra_args: Sequence[Any] = (),
     ) -> pl.Expr:
         """See documentation for ``fold()``."""
-        return fold(
-            self._expr, initial_accumulator, function, return_dtype, extra_args
-        )
+        return fold(self._expr, function, initial_accumulator, return_dtype, extra_args)
