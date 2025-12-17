@@ -15,7 +15,15 @@ from functools import reduce
 from inspect import signature, getclosurevars
 from operator import or_
 from types import FunctionType
-from typing import Callable, Concatenate, TypeVar, ParamSpec, TYPE_CHECKING
+from typing import (
+    Any,
+    Callable,
+    Concatenate,
+    TypeVar,
+    ParamSpec,
+    Sequence,
+    TYPE_CHECKING,
+)
 
 
 import numpy as np
@@ -33,59 +41,64 @@ __all__ = ["collect_fold", "collect_scan"]
 
 
 @jit(nogil=True)
-def _folder1(numba_function, acc, arr1):
+def _folder1(numba_function, acc, extra_args, arr1):
     """Loop and fold a 1-argument function."""
     for i in range(len(arr1)):
-        acc = numba_function(acc, arr1[i])
+        acc = numba_function(acc, *extra_args, arr1[i])
     return acc
 
 
 @jit(nogil=True)
-def _folder2(numba_function, acc, arr1, arr2):
+def _folder2(numba_function, acc, extra_args, arr1, arr2):
     """Loop and fold a 2-argument function."""
     for i in range(len(arr1)):
-        acc = numba_function(acc, arr1[i], arr2[i])
+        acc = numba_function(acc, *extra_args, arr1[i], arr2[i])
     return acc
 
 
 @jit(nogil=True)
-def _folder3(numba_function, acc, arr1, arr2, arr3):
+def _folder3(numba_function, acc, extra_args, arr1, arr2, arr3):
     """Loop and fold a 3-argument function."""
     for i in range(len(arr1)):
-        acc = numba_function(acc, arr1[i], arr2[i], arr3[i])
+        acc = numba_function(acc, *extra_args, arr1[i], arr2[i], arr3[i])
     return acc
 
 
 @jit(nogil=True)
-def _folder4(numba_function, acc, arr1, arr2, arr3, arr4):
+def _folder4(numba_function, acc, extra_args, arr1, arr2, arr3, arr4):
     """Loop and fold a 4-argument function."""
     for i in range(len(arr1)):
-        acc = numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i])
+        acc = numba_function(acc, *extra_args, arr1[i], arr2[i], arr3[i], arr4[i])
     return acc
 
 
 @jit(nogil=True)
-def _folder5(numba_function, acc, arr1, arr2, arr3, arr4, arr5):
+def _folder5(numba_function, acc, extra_args, arr1, arr2, arr3, arr4, arr5):
     """Loop and fold a 5-argument function."""
     for i in range(len(arr1)):
-        acc = numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i])
+        acc = numba_function(
+            acc, *extra_args, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i]
+        )
     return acc
 
 
 @jit(nogil=True)
-def _folder6(numba_function, acc, arr1, arr2, arr3, arr4, arr5, arr6):
+def _folder6(numba_function, acc, extra_args, arr1, arr2, arr3, arr4, arr5, arr6):
     """Loop and fold a 6-argument function."""
     for i in range(len(arr1)):
-        acc = numba_function(acc, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i], arr6[i])
+        acc = numba_function(
+            acc, *extra_args, arr1[i], arr2[i], arr3[i], arr4[i], arr5[i], arr6[i]
+        )
     return acc
 
 
 @jit(nogil=True)
-def _folder7(numba_function, acc, arr1, arr2, arr3, arr4, arr5, arr6, arr7):
+def _folder7(numba_function, acc, extra_args, arr1, arr2, arr3, arr4, arr5, arr6, arr7):
     """Loop and fold a 7-argument function."""
     for i in range(len(arr1)):
         acc = numba_function(
             acc,
+            *extra_args,
             arr1[i],
             arr2[i],
             arr3[i],
@@ -98,11 +111,14 @@ def _folder7(numba_function, acc, arr1, arr2, arr3, arr4, arr5, arr6, arr7):
 
 
 @jit(nogil=True)
-def _folder8(numba_function, acc, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8):
+def _folder8(
+    numba_function, acc, extra_args, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8
+):
     """Loop and fold a 8-argument function."""
     for i in range(len(arr1)):
         acc = numba_function(
             acc,
+            *extra_args,
             arr1[i],
             arr2[i],
             arr3[i],
@@ -116,11 +132,25 @@ def _folder8(numba_function, acc, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8
 
 
 @jit(nogil=True)
-def _folder9(numba_function, acc, arr1, arr2, arr3, arr4, arr5, arr6, arr7, arr8, arr9):
+def _folder9(
+    numba_function,
+    acc,
+    extra_args,
+    arr1,
+    arr2,
+    arr3,
+    arr4,
+    arr5,
+    arr6,
+    arr7,
+    arr8,
+    arr9,
+):
     """Loop and fold a 9-argument function."""
     for i in range(len(arr1)):
         acc = numba_function(
             acc,
+            *extra_args,
             arr1[i],
             arr2[i],
             arr3[i],
@@ -180,7 +210,34 @@ def _ensure_captured_vars_are_unchanged(function: FunctionType) -> None:
         _CAPTURED_VARS_HASHES[function] = vars_hash
 
 
-def _prep_args(
+def _compile_function(function: FunctionType) -> Dispatcher:
+    """
+    Wrap a Python function with ``@numba.jit``, cache, and return.
+    """
+    assert isinstance(function, FunctionType)
+    _ensure_captured_vars_are_unchanged(function)
+
+    if function in _NUMBA_CACHE:
+        numba_function = _NUMBA_CACHE[function]
+    else:
+        numba_function = jit(nogil=True)(function)
+        _NUMBA_CACHE[function] = numba_function
+    return numba_function
+
+
+def _get_column_names(
+    function: FunctionType, column_names: None | list[str] = None
+) -> list[str]:
+    """
+    Get the column names, extracted from the fold/scan function arguments if
+    necessary.
+    """
+    if column_names is None:
+        column_names = [p for p in signature(function).parameters.keys()][1:]
+    return column_names
+
+
+def _prep_for_df(
     df: pl.DataFrame | pl.LazyFrame,
     function: FunctionType,
     column_names: None | list[str] = None,
@@ -195,56 +252,22 @@ def _prep_args(
         3. Validate the function and (utilizing a cache) wrap it with
            ``numba.jit``.
     """
-    assert isinstance(function, FunctionType)
-    _ensure_captured_vars_are_unchanged(function)
-
-    if column_names is None:
-        column_names = [p for p in signature(function).parameters.keys()][1:]
+    numba_function = _compile_function(function)
+    column_names = _get_column_names(function, column_names)
     lazy_df = df.lazy().select_seq(*column_names)
-
-    if function in _NUMBA_CACHE:
-        numba_function = _NUMBA_CACHE[function]
-    else:
-        numba_function = jit(nogil=True)(function)
-        _NUMBA_CACHE[function] = numba_function
 
     return (lazy_df, numba_function, column_names)
 
 
-def collect_fold(
-    df: pl.DataFrame | pl.LazyFrame,
-    initial_accumulator: T,
-    function: Callable[Concatenate[T, P], T],
-    column_names: None | list[str] = None,
-) -> T:
+def _get_folder(num_args: int) -> Callable[Concatenate[T, P, T]]:
     """
-    Collect a frame into a literal value by folding it using a function.
-
-    Streaming is used to save memory.
-
-    If column names are not given, the names of the arguments to the passed in
-    function will be used (skipping the first one, since that's the
-    accumulator).
-
-    For each row, the accumulator will be passed in to the given function along
-    with the values for respective columns.  The returned result will be a new
-    accumulator used for the next row.  The final accumulator is the result of
-    this function.
-
-    Rows with nulls are filtered out before processing.
-
-    The given function will be compiled with Numba.  If it captures variables,
-    those variables must not change over time, since the function will only be
-    compiled once.
+    Return the folder function for the given number of arguments.
     """
-    (lazy_df, numba_function, column_names) = _prep_args(df, function, column_names)
-    lazy_df = lazy_df.drop_nulls()
-
     # As an alternative to doing dispatch here, we could do the dispatch inside
     # the Numba function, which would be less verbose and duplicative. However,
     # that means longer compilation time since the Numba function will be much
     # more complex.
-    match len(column_names):
+    match num_args:
         case 0:
             raise ValueError("You must pass in at least one column name")
 
@@ -277,17 +300,100 @@ def collect_fold(
 
         case _:
             raise RuntimeError(
-                f"You passed in {len(column_names)} columns, but currently "
+                f"You passed in {num_args} columns, but currently "
                 "only up to 9 columns are supported; if you need more, file "
                 "an issue."
             )
 
+    return folder
+
+
+def collect_fold(
+    df: pl.DataFrame | pl.LazyFrame,
+    initial_accumulator: T,
+    function: Callable[Concatenate[T, P], T],
+    column_names: None | list[str] = None,
+) -> T:
+    """
+    Collect a frame into a literal value by folding it using a function.
+
+    Streaming is used to save memory.
+
+    If column names are not given, the names of the arguments to the passed in
+    function will be used (skipping the first one, since that's the
+    accumulator).
+
+    For each row, the accumulator will be passed in to the given function along
+    with the values for respective columns.  The returned result will be a new
+    accumulator used for the next row.  The final accumulator is the result of
+    this function.
+
+    Rows with nulls are filtered out before processing.
+
+    The given function will be compiled with Numba.  If it captures variables,
+    those variables must not change over time, since the function will only be
+    compiled once.
+    """
+    (lazy_df, numba_function, column_names) = _prep_for_df(df, function, column_names)
+    lazy_df = lazy_df.drop_nulls()
+    folder = _get_folder(len(column_names))
+
     acc = initial_accumulator
     for batch_df in lazy_df.collect_batches(chunk_size=50_000, lazy=True):
         acc = folder(
-            numba_function, acc, *(batch_df[n].to_numpy() for n in column_names)
+            numba_function, acc, (), *(batch_df[n].to_numpy() for n in column_names)
         )
     return acc
+
+
+def fold(
+    expr: pl.Expr,
+    function: Callable[Concatenate[T, P], T],
+    initial_accumulator: T,
+    return_dtype: PolarsDataType,
+    extra_args: Sequence[Any] = (),
+) -> pl.Expr:
+    """
+    Collect an expression into a literal value by folding it using a function.
+
+    Nulls will be dropped before the function is called.
+
+    To support multiple arguments, you can use ``pl.struct()`` to combine
+    multiple columns into a ``Struct``.  The struct columns should be in the
+    order you wish to pass to the function.
+
+    Streaming is NOT used, so memory usage may be high.
+
+    ``**extra_args`` allows passing in additional constants to the called
+    function, in the order they were passed in; they will be passed in at the
+    end of the arguments.
+
+    See ``collect_fold()`` for other details.
+    """
+    numba_function = _compile_function(function)
+
+    def handle_data(series: pl.Series) -> T:
+        if series.dtype == pl.Struct:
+            df = series.struct.unnest()
+            column_names = df.columns
+        else:
+            df = pl.DataFrame({"fold": series})
+            column_names = ["fold"]
+        df = df.drop_nulls()
+        folder = _get_folder(len(column_names))
+        return folder(
+            numba_function,
+            initial_accumulator,
+            tuple(extra_args),
+            *(df[n].to_numpy() for n in column_names),
+        )
+
+    return expr.map_batches(
+        handle_data,
+        is_elementwise=False,
+        returns_scalar=True,
+        return_dtype=return_dtype,
+    )
 
 
 _POLARS_DTYPE_TO_NUMPY = {
@@ -493,7 +599,7 @@ def collect_scan(
     particular row will be null in the output ``Series``, and the row will not
     be passed to the function.
     """
-    (lazy_df, numba_function, column_names) = _prep_args(df, function, column_names)
+    (lazy_df, numba_function, column_names) = _prep_for_df(df, function, column_names)
     np_dtype = _polars_dtype_to_numpy(result_dtype)
 
     match len(column_names):
@@ -558,3 +664,21 @@ def collect_scan(
 
     result = pl.concat(results)
     return result
+
+
+@pl.api.register_expr_namespace("plumba")
+class _PolarsNumbaExprNamespace:
+    def __init__(self, expr: pl.Expr) -> None:
+        self._expr = expr
+
+    def fold(
+        self,
+        function: Callable[Concatenate[T, P], T],
+        initial_accumulator: T,
+        return_dtype: PolarsDataType,
+        extra_args: Sequence[Any] = (),
+    ) -> pl.Expr:
+        return fold(self._expr, function, initial_accumulator, return_dtype, extra_args)
+
+
+_PolarsNumbaExprNamespace.fold.__doc__ = fold.__doc__

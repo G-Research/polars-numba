@@ -1,12 +1,12 @@
 """
-Examples of using ``collect_fold()``.
+Examples of using ``Expr.plumba.fold()``.
 """
 
 from datetime import date
 
 import polars as pl
+import polars_numba  # noqa: F401
 
-from polars_numba import collect_fold
 
 #############################################
 ### Longest streak of days below freezing ###
@@ -23,22 +23,20 @@ df = pl.DataFrame(
 
 # We want to know the longest numbers of days in a row that the temperature was
 # zero or below:
-def freezing_streak(acc, max_temp):
-    (prev_max_streak, cur_days) = acc
-    if max_temp <= 0:
-        cur_days += 1
-    else:
-        cur_days = 0
-    prev_max_streak = max(prev_max_streak, cur_days)
-    return (prev_max_streak, cur_days)
+def freezing_streak(expr: pl.Expr) -> pl.Expr:
+    def impl(acc, max_temp):
+        (prev_max_streak, cur_days) = acc
+        if max_temp <= 0:
+            cur_days += 1
+        else:
+            cur_days = 0
+        prev_max_streak = max(prev_max_streak, cur_days)
+        return (prev_max_streak, cur_days)
+
+    return expr.plumba.fold(impl, (0, 0), pl.Array(pl.Int64, 2)).arr.first()
 
 
-streak, _ = collect_fold(df, (0, 0), freezing_streak, ["max_temp"])
-assert streak == 3
-
-# Since the argument name to the function is the same as the column name, we
-# don't actually have to specificy column names:
-streak, _ = collect_fold(df, (0, 0), freezing_streak)
+streak = df.select(pl.col("max_temp").pipe(freezing_streak)).item()
 assert streak == 3
 
 
@@ -47,39 +45,53 @@ assert streak == 3
 
 
 def credit_card_balance(
-    starting_balance: float, max_allowed_balance: float, attempted_purchases: pl.Series
-) -> float:
+    attempted_purchases: pl.Expr, max_allowed_balance: float
+) -> pl.Expr:
     """
-    Given a starting balance, a maximum allowed balance, and a series of
-    attempted purchase amounts, return the final balance.
+    Given a series of attempted purchase amounts, a starting balance, and a
+    maximum allowed balance, return the final balance.
 
     Any purchase that takes the balance above the maximum allowed balance will
     be rejected.
     """
 
-    def maybe_sum(current_balance, attempted_purchase, max_allowed_balance):
+    def maybe_sum(current_balance, max_allowed_balance, attempted_purchase):
         new_balance = current_balance + attempted_purchase
         if new_balance <= max_allowed_balance:
             current_balance = new_balance
         return current_balance
 
-    # For performance reasons changing a function's bound variable is not
-    # allowed. So, we pass in the parameter by adding it as a column, and use a
-    # LazyFrame for that so it doesn't have to be fully in memory.
-    df = (
-        pl.DataFrame({"attempted_purchase": attempted_purchases})
-        .lazy()
-        .with_columns(max_allowed_balance=max_allowed_balance)
-    )
-    return collect_fold(
-        df,
-        starting_balance,
-        maybe_sum,
-    )
+    return attempted_purchases.plumba.fold(
+        maybe_sum, 0.0, pl.Float64, extra_args=[max_allowed_balance]
+    ).alias("balance")
 
 
-attempted_purchases = pl.Series([900, 70, -400, 60])
-final_balance = credit_card_balance(50, 1000, attempted_purchases)
+df = pl.DataFrame({"attempted_purchases": [50, 900, 70, -400, 60]})
+final_balance = df.select(
+    pl.col("attempted_purchases").pipe(credit_card_balance, max_allowed_balance=1000)
+).item()
 # We expect the 70 purchase to be rejected because it will take the balance
 # above 1000:
 assert final_balance == 50 + 900 - 400 + 60
+
+
+###################################################
+### Calculating a credit card balance, per user ###
+
+df = pl.DataFrame(
+    {
+        "user": ["bob", "alice", "alice", "alice", "alice", "alice", "bob"],
+        "attempted_purchase": [17.0, 50.0, 900.0, 70.0, -400.0, 60.0, 0.5],
+    }
+)
+final_balance = (
+    df.group_by("user")
+    .agg(
+        pl.col("attempted_purchase").pipe(credit_card_balance, max_allowed_balance=1000)
+    )
+    .sort("user")
+)
+assert final_balance.to_dict(as_series=False) == {
+    "user": ["alice", "bob"],
+    "balance": [610.0, 17.5],
+}

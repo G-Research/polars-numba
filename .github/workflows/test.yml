@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
@@ -30,4 +30,5 @@ jobs:
       run: |
         python -m pytest
         python examples_fold.py
-        python examples_scan.py
+        python examples_collect_fold.py
+        python examples_collect_scan.py
