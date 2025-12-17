@@ -31,4 +31,5 @@ jobs:
         python -m pytest
         python examples_fold.py
         python examples_collect_fold.py
+        python examples_scan.py
         python examples_collect_scan.py
