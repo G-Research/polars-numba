@@ -83,14 +83,13 @@ def test_accumulator_type_casting():
 
 def test_generate_column_names():
     """
-    If column names aren't given, use the argument names in the passed in
-    function.
+    If column names aren't given, use all the columns in the given DataFrame.
     """
 
     def operator(acc, b, a):
         return acc + 10 * b + a
 
-    df = pl.DataFrame({"acc": [1], "a": [5], "b": [20]})
+    df = pl.DataFrame({"b": [20], "a": [5]})
     assert collect_scan(df, operator, 0.5, pl.Float64).to_list() == [205.5]
 
 

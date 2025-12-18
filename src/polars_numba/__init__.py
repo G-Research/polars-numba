@@ -683,16 +683,23 @@ def collect_scan(
     If any of the selected columns have nulls on a particular row, that
     particular row will be null in the output ``Series``, and the row will not
     be passed to the function.
+
+    If no column names are given, all the columns in the DataFrame are passed
+    to the function.
     """
     (lazy_df, numba_function, column_names) = _prep_for_df(df, function, column_names)
     np_dtype = _polars_dtype_to_numpy(result_dtype)
-    scanner = _get_scanner(len(column_names))
+    scanner = None
 
     acc = initial_accumulator
     results = []
     for batch_df in lazy_df.collect_batches(chunk_size=50_000, lazy=True):
+        if scanner is None:
+            if column_names is None:
+                column_names = batch_df.columns
+            scanner = _get_scanner(len(column_names))
         batch_result = np.empty((len(batch_df),), dtype=np_dtype)
-        is_null = reduce(or_, (batch_df[s].is_null() for s in batch_df.columns))
+        is_null = reduce(or_, (s.is_null() for s in batch_df.get_columns()))
 
         # We can't have nulls in the dataframe; NumPy has no concept of nulls.
         # And so e.g. for an int Series, Polars will turn it into a float array
@@ -705,7 +712,7 @@ def collect_scan(
             (),
             batch_result,
             is_null.to_numpy(),
-            *(batch_df[n].to_numpy() for n in column_names),
+            *(s.to_numpy() for s in batch_df.get_columns()),
         )
         results.append(
             pl.Series("scan", batch_result, dtype=result_dtype).set(is_null, None)
