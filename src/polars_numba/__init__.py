@@ -310,8 +310,8 @@ def _get_folder(num_args: int) -> Callable[Concatenate[T, P, T]]:
 
 def collect_fold(
     df: pl.DataFrame | pl.LazyFrame,
-    initial_accumulator: T,
     function: Callable[Concatenate[T, P], T],
+    initial_accumulator: T,
     column_names: None | list[str] = None,
 ) -> T:
     """
@@ -663,8 +663,8 @@ def _get_scanner(num_args: int) -> Dispatcher:
 
 def collect_scan(
     df: pl.DataFrame | pl.LazyFrame,
-    initial_accumulator: T,
     function: Callable[Concatenate[T, P], T],
+    initial_accumulator: T,
     result_dtype: PolarsDataType,
     column_names: None | list[str] = None,
 ) -> pl.Series:

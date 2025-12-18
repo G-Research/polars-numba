@@ -23,7 +23,7 @@ def test_varying_number_of_columns():
     df = pl.DataFrame({str(i): [10**i] for i in range(1, 10)})
     for num_cols in range(1, 10):
         assert collect_scan(
-            df, 7, add_columns, pl.Int64, [str(col) for col in range(1, num_cols + 1)]
+            df, add_columns, 7, pl.Int64, [str(col) for col in range(1, num_cols + 1)]
         ).to_list() == [7 + sum(10**j for j in range(1, num_cols + 1))]
 
 
@@ -34,7 +34,7 @@ def test_lazy_and_not_lazy():
     df = pl.DataFrame({"a": [1, 2], "b": [30, 50]})
     for test_df in [df, df.lazy()]:
         assert collect_scan(
-            test_df, 0.5, add_columns, pl.Float64, ["a", "b"]
+            test_df, add_columns, 0.5, pl.Float64, ["a", "b"]
         ).to_list() == [
             31.5,
             83.5,
@@ -53,7 +53,7 @@ def test_nulls_kept_as_null():
             "irrelevant": [9000, None, None, None],
         }
     )
-    assert collect_scan(df, 0.5, add_columns, pl.Float64, ["a", "b"]).to_list() == [
+    assert collect_scan(df, add_columns, 0.5, pl.Float64, ["a", "b"]).to_list() == [
         31.5,
         None,
         None,
@@ -73,11 +73,11 @@ def test_accumulator_type_casting():
 
     df = pl.DataFrame({"a": [1.5, 2.25]})
     # First input is explicitly an integer, but the result should be a float:
-    result = collect_scan(df, np.int64(10), to_f32, pl.Float32, ["a"])
+    result = collect_scan(df, to_f32, np.int64(10), pl.Float32, ["a"])
     assert_series_equal(result, pl.Series("scan", [11.5, 13.75], dtype=pl.Float32))
 
     # Result should be an int:
-    result = collect_scan(df, np.int64(10), to_f32, pl.Int32, ["a"])
+    result = collect_scan(df, to_f32, np.int64(10), pl.Int32, ["a"])
     assert_series_equal(result, pl.Series("scan", [11, 13], dtype=pl.Int32))
 
 
@@ -91,7 +91,7 @@ def test_generate_column_names():
         return acc + 10 * b + a
 
     df = pl.DataFrame({"acc": [1], "a": [5], "b": [20]})
-    assert collect_scan(df, 0.5, operator, pl.Float64).to_list() == [205.5]
+    assert collect_scan(df, operator, 0.5, pl.Float64).to_list() == [205.5]
 
 
 def test_compiled_function_caching():
@@ -110,7 +110,7 @@ def test_compiled_function_caching():
     df = pl.DataFrame({"a": [3]}, schema={"a": pl.Int64()}).lazy()
     with measure_cpu_time() as elapsed:
         assert_series_equal(
-            collect_scan(df, np.int64(2), multiply, pl.Int64),
+            collect_scan(df, multiply, np.int64(2), pl.Int64),
             pl.Series("scan", [6], dtype=pl.Int64),
         )
     elapsed_with_compile = elapsed.time
@@ -121,7 +121,7 @@ def test_compiled_function_caching():
     with measure_cpu_time() as elapsed:
         for _ in range(rounds):
             assert_series_equal(
-                collect_scan(df, np.uint64(4), multiply, pl.Int64),
+                collect_scan(df, multiply, np.uint64(4), pl.Int64),
                 pl.Series("scan", [12], dtype=pl.Int64),
             )
     assert (elapsed.time / rounds) < (elapsed_with_compile / 10)
@@ -129,7 +129,7 @@ def test_compiled_function_caching():
     # If we use a different type, it compiles a new version:
     df = pl.DataFrame({"a": [3]}, schema={"a": pl.UInt64()}).lazy()
     assert_series_equal(
-        collect_scan(df, 0.5, multiply, pl.Float64),
+        collect_scan(df, multiply, 0.5, pl.Float64),
         pl.Series("scan", [1.5], dtype=pl.Float64),
     )
 
@@ -147,22 +147,22 @@ def test_captured_variables_must_not_change():
         return acc + a + captured_var + CAPTURED_GLOBALS
 
     df = pl.DataFrame({"a": [3]}, schema={"a": pl.UInt64()}).lazy()
-    assert collect_scan(df, 20, func, pl.Int64).to_list() == [7123]
+    assert collect_scan(df, func, 20, pl.Int64).to_list() == [7123]
 
     # Change a local captured var:
     captured_var = 200
     with pytest.raises(RuntimeError, match="changed a captured variable"):
-        collect_scan(df, 20, func, pl.Int64)
+        collect_scan(df, func, 20, pl.Int64)
 
     # Restore local captured var:
     captured_var = 100
-    assert collect_scan(df, 40, func, pl.Int64).to_list() == [7143]
+    assert collect_scan(df, func, 40, pl.Int64).to_list() == [7143]
 
     # Change global captured var:
     global CAPTURED_GLOBALS
     CAPTURED_GLOBALS = 6000
     with pytest.raises(RuntimeError, match="changed a captured variable"):
-        collect_scan(df, 20, func, pl.Int64)
+        collect_scan(df, func, 20, pl.Int64)
 
 
 def test_two_dtype_variants():
@@ -172,6 +172,6 @@ def test_two_dtype_variants():
     df = pl.DataFrame({"a": [1, 2]})
     for dtype in (pl.Int64(), pl.Int64):
         assert_series_equal(
-            collect_scan(df, 0, lambda acc, a: acc + a, dtype),
+            collect_scan(df, lambda acc, a: acc + a, 0, dtype),
             pl.Series("scan", [1, 3], pl.Int64),
         )

@@ -20,7 +20,7 @@ def highest_so_far(highest_so_far, price):
     return max(highest_so_far, price)
 
 
-series = collect_scan(df, 0, highest_so_far, pl.UInt64)
+series = collect_scan(df, highest_so_far, 0, pl.UInt64)
 #         Original values: [20, 19, 21, 22, 23, 21, 20, 24, 25]
 assert series.to_list() == [20, 20, 21, 22, 23, 23, 23, 24, 25]
 
@@ -54,7 +54,7 @@ def credit_card_balance(
         .lazy()
         .with_columns(max_allowed_balance=max_allowed_balance)
     )
-    return collect_scan(df, starting_balance, maybe_sum, pl.Float64)
+    return collect_scan(df, maybe_sum, starting_balance, pl.Float64)
 
 
 attempted_purchases = pl.Series([900, 70, -400, 60])

@@ -33,12 +33,12 @@ def freezing_streak(acc, max_temp):
     return (prev_max_streak, cur_days)
 
 
-streak, _ = collect_fold(df, (0, 0), freezing_streak, ["max_temp"])
+streak, _ = collect_fold(df, freezing_streak, (0, 0), ["max_temp"])
 assert streak == 3
 
 # Since the argument name to the function is the same as the column name, we
 # don't actually have to specificy column names:
-streak, _ = collect_fold(df, (0, 0), freezing_streak)
+streak, _ = collect_fold(df, freezing_streak, (0, 0))
 assert streak == 3
 
 
@@ -71,11 +71,7 @@ def credit_card_balance(
         .lazy()
         .with_columns(max_allowed_balance=max_allowed_balance)
     )
-    return collect_fold(
-        df,
-        starting_balance,
-        maybe_sum,
-    )
+    return collect_fold(df, maybe_sum, starting_balance)
 
 
 attempted_purchases = pl.Series([900, 70, -400, 60])
