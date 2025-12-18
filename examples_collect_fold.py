@@ -36,9 +36,9 @@ def freezing_streak(acc, max_temp):
 streak, _ = collect_fold(df, freezing_streak, (0, 0), ["max_temp"])
 assert streak == 3
 
-# Since the argument name to the function is the same as the column name, we
-# don't actually have to specificy column names:
-streak, _ = collect_fold(df, freezing_streak, (0, 0))
+# Instead of passing column names, can also just limit the DataFrame to those
+# columns that the function expects:
+streak, _ = collect_fold(df.select_seq(["max_temp"]), freezing_streak, (0, 0))
 assert streak == 3
 
 

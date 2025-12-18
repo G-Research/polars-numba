@@ -68,14 +68,14 @@ def test_accumulator_type_casting():
 
 def test_generate_column_names():
     """
-    If column names aren't given, use the argument names in the passed in
-    function.
+    If column names aren't given, use the columns in the order they are in the
+    DataFrame.
     """
 
     def operator(acc, b, a):
-        return acc + 10 * b + a
+        return acc + 10 * a + b
 
-    df = pl.DataFrame({"acc": [1, 2, 3], "a": [5, 6, 7], "b": [20, 30, 20]})
+    df = pl.DataFrame({"b": [5, 6, 7], "a": [20, 30, 20]})
     assert collect_fold(df, operator, 0.5) == 718.5
 
 

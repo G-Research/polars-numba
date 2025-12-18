@@ -247,14 +247,15 @@ def _prep_for_df(
 
         1. Convert frame to ``LazyFrame``.
 
-        2. Extract column names if necessary.
+        2. Limit columns in the ``LazyFrame``, if necessary.
 
         3. Validate the function and (utilizing a cache) wrap it with
            ``numba.jit``.
     """
     numba_function = _compile_function(function)
-    column_names = _get_column_names(function, column_names)
-    lazy_df = df.lazy().select_seq(*column_names)
+    lazy_df = df.lazy()
+    if column_names is not None:
+        lazy_df = lazy_df.select_seq(*column_names)
 
     return (lazy_df, numba_function, column_names)
 
@@ -319,9 +320,8 @@ def collect_fold(
 
     Streaming is used to save memory.
 
-    If column names are not given, the names of the arguments to the passed in
-    function will be used (skipping the first one, since that's the
-    accumulator).
+    If column names are not given, all columns in the DataFrame will be passed
+    to the given function.
 
     For each row, the accumulator will be passed in to the given function along
     with the values for respective columns.  The returned result will be a new
@@ -336,12 +336,16 @@ def collect_fold(
     """
     (lazy_df, numba_function, column_names) = _prep_for_df(df, function, column_names)
     lazy_df = lazy_df.drop_nulls()
-    folder = _get_folder(len(column_names))
+    folder = None
 
     acc = initial_accumulator
     for batch_df in lazy_df.collect_batches(chunk_size=50_000, lazy=True):
+        if folder is None:
+            if column_names is None:
+                column_names = batch_df.columns
+            folder = _get_folder(len(column_names))
         acc = folder(
-            numba_function, acc, (), *(batch_df[n].to_numpy() for n in column_names)
+            numba_function, acc, (), *(s.to_numpy() for s in batch_df.get_columns())
         )
     return acc
 
