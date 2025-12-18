@@ -1,4 +1,4 @@
-"""Tests for collect_scan()."""
+"""Tests for plumba.scan."""
 
 from typing import Sequence
 
@@ -81,7 +81,7 @@ def test_accumulator_type_casting():
 
 def test_compiled_function_caching():
     """
-    If collect_scan() is called with the same function and same types again, it
+    If plumba.scan is called with the same function and same types again, it
     uses a cached version of the Numba precompiled function.
 
     If the types change, the already-cached version is not used.
