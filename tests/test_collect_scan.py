@@ -1,5 +1,7 @@
 """Tests for collect_scan()."""
 
+from typing import Sequence
+
 import polars as pl
 from polars.testing import assert_series_equal
 from polars_numba import collect_scan
@@ -16,15 +18,24 @@ def add_columns(acc, *values):
     return acc
 
 
-def test_varying_number_of_columns():
+@pytest.mark.parametrize("num_cols", list(range(1, 10)))
+@pytest.mark.parametrize("extra_args", [(), (0.5,), (0.25, 0.5)])
+def test_varying_number_of_columns(num_cols: int, extra_args: Sequence[float]):
     """
     Up to 9 columns can be processed.
     """
-    df = pl.DataFrame({str(i): [10**i] for i in range(1, 10)})
+    df = pl.DataFrame({str(i): [10.0**i] for i in range(1, 10)})
     for num_cols in range(1, 10):
         assert collect_scan(
-            df, add_columns, 7, pl.Int64, [str(col) for col in range(1, num_cols + 1)]
-        ).to_list() == [7 + sum(10**j for j in range(1, num_cols + 1))]
+            df,
+            add_columns,
+            7,
+            pl.Float64,
+            extra_args,
+            [str(col) for col in range(1, num_cols + 1)],
+        ).to_list() == [
+            7 + sum(10**j for j in range(1, num_cols + 1)) + sum(extra_args)
+        ]
 
 
 def test_lazy_and_not_lazy():
@@ -33,9 +44,7 @@ def test_lazy_and_not_lazy():
     """
     df = pl.DataFrame({"a": [1, 2], "b": [30, 50]})
     for test_df in [df, df.lazy()]:
-        assert collect_scan(
-            test_df, add_columns, 0.5, pl.Float64, ["a", "b"]
-        ).to_list() == [
+        assert collect_scan(test_df, add_columns, 0.5, pl.Float64).to_list() == [
             31.5,
             83.5,
         ]
@@ -53,7 +62,9 @@ def test_nulls_kept_as_null():
             "irrelevant": [9000, None, None, None],
         }
     )
-    assert collect_scan(df, add_columns, 0.5, pl.Float64, ["a", "b"]).to_list() == [
+    assert collect_scan(
+        df, add_columns, 0.5, pl.Float64, column_names=["a", "b"]
+    ).to_list() == [
         31.5,
         None,
         None,
@@ -73,11 +84,11 @@ def test_accumulator_type_casting():
 
     df = pl.DataFrame({"a": [1.5, 2.25]})
     # First input is explicitly an integer, but the result should be a float:
-    result = collect_scan(df, to_f32, np.int64(10), pl.Float32, ["a"])
+    result = collect_scan(df, to_f32, np.int64(10), pl.Float32)
     assert_series_equal(result, pl.Series("scan", [11.5, 13.75], dtype=pl.Float32))
 
     # Result should be an int:
-    result = collect_scan(df, to_f32, np.int64(10), pl.Int32, ["a"])
+    result = collect_scan(df, to_f32, np.int64(10), pl.Int32)
     assert_series_equal(result, pl.Series("scan", [11, 13], dtype=pl.Int32))
 
 

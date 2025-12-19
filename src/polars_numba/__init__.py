@@ -675,6 +675,7 @@ def collect_scan(
     function: Callable[Concatenate[T, P], T],
     initial_accumulator: T,
     result_dtype: PolarsDataType,
+    extra_args: Sequence[Any] = (),
     column_names: None | list[str] = None,
 ) -> pl.Series:
     """
@@ -694,6 +695,7 @@ def collect_scan(
     """
     (lazy_df, numba_function, column_names) = _prep_for_df(df, function, column_names)
     np_dtype = _polars_dtype_to_numpy(result_dtype)
+    extra_args = tuple(extra_args)
     scanner = None
 
     acc = initial_accumulator
@@ -714,7 +716,7 @@ def collect_scan(
         scanner(
             numba_function,
             acc,
-            (),
+            extra_args,
             batch_result,
             is_null.to_numpy(),
             *(s.to_numpy() for s in batch_df.get_columns()),
