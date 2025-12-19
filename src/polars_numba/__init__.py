@@ -313,6 +313,7 @@ def collect_fold(
     df: pl.DataFrame | pl.LazyFrame,
     function: Callable[Concatenate[T, P], T],
     initial_accumulator: T,
+    extra_args: Sequence[Any] = (),
     column_names: None | list[str] = None,
 ) -> T:
     """
@@ -336,16 +337,20 @@ def collect_fold(
     """
     (lazy_df, numba_function, column_names) = _prep_for_df(df, function, column_names)
     lazy_df = lazy_df.drop_nulls()
+    extra_args = tuple(extra_args)
+    acc = initial_accumulator
     folder = None
 
-    acc = initial_accumulator
     for batch_df in lazy_df.collect_batches(chunk_size=50_000, lazy=True):
         if folder is None:
             if column_names is None:
                 column_names = batch_df.columns
             folder = _get_folder(len(column_names))
         acc = folder(
-            numba_function, acc, (), *(s.to_numpy() for s in batch_df.get_columns())
+            numba_function,
+            acc,
+            extra_args,
+            *(s.to_numpy() for s in batch_df.get_columns()),
         )
     return acc
 
