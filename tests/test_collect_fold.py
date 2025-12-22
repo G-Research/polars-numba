@@ -1,5 +1,7 @@
 """Tests for collect_fold()."""
 
+from typing import Sequence
+
 import polars as pl
 from polars_numba import collect_fold
 from numba import float32
@@ -15,15 +17,16 @@ def add_columns(acc, *values):
     return acc
 
 
-def test_varying_number_of_columns():
+@pytest.mark.parametrize("num_cols", list(range(1, 10)))
+@pytest.mark.parametrize("extra_args", [(), (0.5,), (0.25, 0.5)])
+def test_varying_number_of_columns(num_cols: int, extra_args: Sequence[float]):
     """
     Up to 9 columns can be processed.
     """
-    df = pl.DataFrame({str(i): 10**i for i in range(1, 10)})
-    for num_cols in range(1, 10):
-        assert collect_fold(
-            df, 7, add_columns, [str(col) for col in range(1, num_cols + 1)]
-        ) == 7 + sum(10**j for j in range(1, num_cols + 1))
+    df = pl.DataFrame({str(i): 10.0**i for i in range(1, num_cols + 1)})
+    assert collect_fold(
+        df, add_columns, 7, extra_args, [str(col) for col in range(1, num_cols + 1)]
+    ) == 7 + sum(10**j for j in range(1, num_cols + 1)) + sum(extra_args)
 
 
 def test_lazy_and_not_lazy():
@@ -32,7 +35,7 @@ def test_lazy_and_not_lazy():
     """
     df = pl.DataFrame({"a": [1, 2], "b": [30, 50]})
     for test_df in [df, df.lazy()]:
-        assert collect_fold(test_df, 0.5, add_columns, ["a", "b"]) == 83.5
+        assert collect_fold(test_df, add_columns, 0.5) == 83.5
 
 
 def test_nulls_filtered_out():
@@ -47,7 +50,10 @@ def test_nulls_filtered_out():
             "irrelevant": [9000, None, None, None],
         }
     )
-    assert collect_fold(df, 0.5, add_columns, ["a", "b"]) == 0.5 + 1 + 30 + 3 + 100
+    assert (
+        collect_fold(df, add_columns, 0.5, column_names=["a", "b"])
+        == 0.5 + 1 + 30 + 3 + 100
+    )
 
 
 def test_accumulator_type_casting():
@@ -62,21 +68,21 @@ def test_accumulator_type_casting():
 
     df = pl.DataFrame({"a": [1.5, 2.25]})
     # First input is explicitly an integer, but the result should be a float:
-    result = collect_fold(df, np.int64(10), to_f32, ["a"])
+    result = collect_fold(df, to_f32, np.int64(10))
     assert result == 13.75
 
 
 def test_generate_column_names():
     """
-    If column names aren't given, use the argument names in the passed in
-    function.
+    If column names aren't given, use the columns in the order they are in the
+    DataFrame.
     """
 
     def operator(acc, b, a):
-        return acc + 10 * b + a
+        return acc + 10 * a + b
 
-    df = pl.DataFrame({"acc": [1, 2, 3], "a": [5, 6, 7], "b": [20, 30, 20]})
-    assert collect_fold(df, 0.5, operator) == 718.5
+    df = pl.DataFrame({"b": [5, 6, 7], "a": [20, 30, 20]})
+    assert collect_fold(df, operator, 0.5) == 718.5
 
 
 def test_compiled_function_caching():
@@ -94,7 +100,7 @@ def test_compiled_function_caching():
     # compiled so this will take some time.
     df = pl.DataFrame({"a": [3]}, schema={"a": pl.UInt64()}).lazy()
     with measure_cpu_time() as elapsed:
-        assert collect_fold(df, np.uint64(2), multiply, ["a"]) == 6
+        assert collect_fold(df, multiply, np.uint64(2)) == 6
     elapsed_with_compile = elapsed.time
 
     # The next few times we expect a cached version to be used, so it should be
@@ -102,12 +108,12 @@ def test_compiled_function_caching():
     rounds = 20
     with measure_cpu_time() as elapsed:
         for _ in range(rounds):
-            assert collect_fold(df, np.uint64(4), multiply, ["a"]) == 12
+            assert collect_fold(df, multiply, np.uint64(4)) == 12
     assert (elapsed.time / rounds) < (elapsed_with_compile / 10)
 
     # If we use a different type, it compiles a new version:
     df = pl.DataFrame({"a": [3]}, schema={"a": pl.UInt64()}).lazy()
-    assert collect_fold(df, 0.5, multiply, ["a"]) == 1.5
+    assert collect_fold(df, multiply, 0.5) == 1.5
 
 
 CAPTURED_GLOBALS = 7000
@@ -123,19 +129,19 @@ def test_captured_variables_must_not_change():
         return acc + x + captured_var + CAPTURED_GLOBALS
 
     df = pl.DataFrame({"a": [3]}, schema={"a": pl.UInt64()}).lazy()
-    assert collect_fold(df, 20, func, ["a"]) == 7123
+    assert collect_fold(df, func, 20) == 7123
 
     # Change a local captured var:
     captured_var = 200
     with pytest.raises(RuntimeError, match="changed a captured variable"):
-        collect_fold(df, 20, func, ["a"])
+        collect_fold(df, func, 20)
 
     # Restore local captured var:
     captured_var = 100
-    assert collect_fold(df, 40, func, ["a"]) == 7143
+    assert collect_fold(df, func, 40) == 7143
 
     # Change global captured var:
     global CAPTURED_GLOBALS
     CAPTURED_GLOBALS = 6000
     with pytest.raises(RuntimeError, match="changed a captured variable"):
-        collect_fold(df, 20, func, ["a"])
+        collect_fold(df, func, 20)

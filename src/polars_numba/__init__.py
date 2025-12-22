@@ -247,14 +247,15 @@ def _prep_for_df(
 
         1. Convert frame to ``LazyFrame``.
 
-        2. Extract column names if necessary.
+        2. Limit columns in the ``LazyFrame``, if necessary.
 
         3. Validate the function and (utilizing a cache) wrap it with
            ``numba.jit``.
     """
     numba_function = _compile_function(function)
-    column_names = _get_column_names(function, column_names)
-    lazy_df = df.lazy().select_seq(*column_names)
+    lazy_df = df.lazy()
+    if column_names is not None:
+        lazy_df = lazy_df.select_seq(*column_names)
 
     return (lazy_df, numba_function, column_names)
 
@@ -310,8 +311,9 @@ def _get_folder(num_args: int) -> Callable[Concatenate[T, P, T]]:
 
 def collect_fold(
     df: pl.DataFrame | pl.LazyFrame,
-    initial_accumulator: T,
     function: Callable[Concatenate[T, P], T],
+    initial_accumulator: T,
+    extra_args: Sequence[Any] = (),
     column_names: None | list[str] = None,
 ) -> T:
     """
@@ -319,9 +321,8 @@ def collect_fold(
 
     Streaming is used to save memory.
 
-    If column names are not given, the names of the arguments to the passed in
-    function will be used (skipping the first one, since that's the
-    accumulator).
+    If column names are not given, all columns in the DataFrame will be passed
+    to the given function.
 
     For each row, the accumulator will be passed in to the given function along
     with the values for respective columns.  The returned result will be a new
@@ -336,12 +337,20 @@ def collect_fold(
     """
     (lazy_df, numba_function, column_names) = _prep_for_df(df, function, column_names)
     lazy_df = lazy_df.drop_nulls()
-    folder = _get_folder(len(column_names))
-
+    extra_args = tuple(extra_args)
     acc = initial_accumulator
+    folder = None
+
     for batch_df in lazy_df.collect_batches(chunk_size=50_000, lazy=True):
+        if folder is None:
+            if column_names is None:
+                column_names = batch_df.columns
+            folder = _get_folder(len(column_names))
         acc = folder(
-            numba_function, acc, (), *(batch_df[n].to_numpy() for n in column_names)
+            numba_function,
+            acc,
+            extra_args,
+            *(s.to_numpy() for s in batch_df.get_columns()),
         )
     return acc
 
@@ -663,9 +672,10 @@ def _get_scanner(num_args: int) -> Dispatcher:
 
 def collect_scan(
     df: pl.DataFrame | pl.LazyFrame,
-    initial_accumulator: T,
     function: Callable[Concatenate[T, P], T],
+    initial_accumulator: T,
     result_dtype: PolarsDataType,
+    extra_args: Sequence[Any] = (),
     column_names: None | list[str] = None,
 ) -> pl.Series:
     """
@@ -679,16 +689,24 @@ def collect_scan(
     If any of the selected columns have nulls on a particular row, that
     particular row will be null in the output ``Series``, and the row will not
     be passed to the function.
+
+    If no column names are given, all the columns in the DataFrame are passed
+    to the function.
     """
     (lazy_df, numba_function, column_names) = _prep_for_df(df, function, column_names)
     np_dtype = _polars_dtype_to_numpy(result_dtype)
-    scanner = _get_scanner(len(column_names))
+    extra_args = tuple(extra_args)
+    scanner = None
 
     acc = initial_accumulator
     results = []
     for batch_df in lazy_df.collect_batches(chunk_size=50_000, lazy=True):
+        if scanner is None:
+            if column_names is None:
+                column_names = batch_df.columns
+            scanner = _get_scanner(len(column_names))
         batch_result = np.empty((len(batch_df),), dtype=np_dtype)
-        is_null = reduce(or_, (batch_df[s].is_null() for s in batch_df.columns))
+        is_null = reduce(or_, (s.is_null() for s in batch_df.get_columns()))
 
         # We can't have nulls in the dataframe; NumPy has no concept of nulls.
         # And so e.g. for an int Series, Polars will turn it into a float array
@@ -698,10 +716,10 @@ def collect_scan(
         scanner(
             numba_function,
             acc,
-            (),
+            extra_args,
             batch_result,
             is_null.to_numpy(),
-            *(batch_df[n].to_numpy() for n in column_names),
+            *(s.to_numpy() for s in batch_df.get_columns()),
         )
         results.append(
             pl.Series("scan", batch_result, dtype=result_dtype).set(is_null, None)

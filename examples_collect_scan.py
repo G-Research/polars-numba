@@ -20,7 +20,7 @@ def highest_so_far(highest_so_far, price):
     return max(highest_so_far, price)
 
 
-series = collect_scan(df, 0, highest_so_far, pl.UInt64)
+series = collect_scan(df, highest_so_far, 0, pl.UInt64)
 #         Original values: [20, 19, 21, 22, 23, 21, 20, 24, 25]
 assert series.to_list() == [20, 20, 21, 22, 23, 23, 23, 24, 25]
 
@@ -40,21 +40,18 @@ def credit_card_balance(
     be rejected.
     """
 
-    def maybe_sum(current_balance, attempted_purchase, max_allowed_balance):
+    def maybe_sum(current_balance, max_allowed_balance, attempted_purchase):
         new_balance = current_balance + attempted_purchase
         if new_balance <= max_allowed_balance:
             current_balance = new_balance
         return current_balance
 
     # For performance reasons changing a function's bound variable is not
-    # allowed. So, we pass in the parameter by adding it as a column, and use a
-    # LazyFrame for that so it doesn't have to be fully in memory.
-    df = (
-        pl.DataFrame({"attempted_purchase": attempted_purchases})
-        .lazy()
-        .with_columns(max_allowed_balance=max_allowed_balance)
+    # allowed. So, we pass in the parameter using extra_args.
+    df = pl.DataFrame({"attempted_purchase": attempted_purchases})
+    return collect_scan(
+        df, maybe_sum, starting_balance, pl.Float64, [max_allowed_balance]
     )
-    return collect_scan(df, starting_balance, maybe_sum, pl.Float64)
 
 
 attempted_purchases = pl.Series([900, 70, -400, 60])

@@ -33,12 +33,12 @@ def freezing_streak(acc, max_temp):
     return (prev_max_streak, cur_days)
 
 
-streak, _ = collect_fold(df, (0, 0), freezing_streak, ["max_temp"])
+streak, _ = collect_fold(df, freezing_streak, (0, 0), column_names=["max_temp"])
 assert streak == 3
 
-# Since the argument name to the function is the same as the column name, we
-# don't actually have to specificy column names:
-streak, _ = collect_fold(df, (0, 0), freezing_streak)
+# Instead of passing column names, can also just limit the DataFrame to those
+# columns that the function expects:
+streak, _ = collect_fold(df.select_seq(["max_temp"]), freezing_streak, (0, 0))
 assert streak == 3
 
 
@@ -57,24 +57,18 @@ def credit_card_balance(
     be rejected.
     """
 
-    def maybe_sum(current_balance, attempted_purchase, max_allowed_balance):
+    def maybe_sum(current_balance, max_allowed_balance, attempted_purchase):
         new_balance = current_balance + attempted_purchase
         if new_balance <= max_allowed_balance:
             current_balance = new_balance
         return current_balance
 
     # For performance reasons changing a function's bound variable is not
-    # allowed. So, we pass in the parameter by adding it as a column, and use a
-    # LazyFrame for that so it doesn't have to be fully in memory.
-    df = (
-        pl.DataFrame({"attempted_purchase": attempted_purchases})
-        .lazy()
-        .with_columns(max_allowed_balance=max_allowed_balance)
-    )
+    # allowed. So, we pass in the parameters using extra_args. These get passed
+    # in right after the accumulator.
+    df = pl.DataFrame({"attempted_purchase": attempted_purchases})
     return collect_fold(
-        df,
-        starting_balance,
-        maybe_sum,
+        df, maybe_sum, starting_balance, extra_args=[max_allowed_balance]
     )
 
 
