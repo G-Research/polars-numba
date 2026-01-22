@@ -670,6 +670,15 @@ def _get_scanner(num_args: int) -> Dispatcher:
     return scanner
 
 
+def _numpy_dtype_and_columns(
+    dtype: PolarsDataType,
+) -> tuple[np.dtype, tuple[int] | tuple]:
+    if isinstance(dtype, pl.Array):
+        return _polars_dtype_to_numpy(dtype.inner), (dtype.width,)
+    else:
+        return _polars_dtype_to_numpy(dtype), ()
+
+
 def collect_scan(
     df: pl.DataFrame | pl.LazyFrame,
     function: Callable[Concatenate[T, P], T],
@@ -694,7 +703,7 @@ def collect_scan(
     to the function.
     """
     (lazy_df, numba_function, column_names) = _prep_for_df(df, function, column_names)
-    np_dtype = _polars_dtype_to_numpy(result_dtype)
+    np_dtype, result_columns = _numpy_dtype_and_columns(result_dtype)
     extra_args = tuple(extra_args)
     scanner = None
 
@@ -705,7 +714,7 @@ def collect_scan(
             if column_names is None:
                 column_names = batch_df.columns
             scanner = _get_scanner(len(column_names))
-        batch_result = np.empty((len(batch_df),), dtype=np_dtype)
+        batch_result = np.empty((len(batch_df),) + result_columns, dtype=np_dtype)
         is_null = reduce(or_, (s.is_null() for s in batch_df.get_columns()))
 
         # We can't have nulls in the dataframe; NumPy has no concept of nulls.
@@ -755,7 +764,7 @@ def scan(
     See ``collect_scan()`` for other details.
     """
     numba_function = _compile_function(function)
-    np_dtype = _polars_dtype_to_numpy(return_dtype)
+    np_dtype, result_columns = _numpy_dtype_and_columns(return_dtype)
 
     def handle_data(series: pl.Series) -> T:
         if series.dtype == pl.Struct:
@@ -765,7 +774,7 @@ def scan(
             df = pl.DataFrame({"fold": series})
             column_names = ["fold"]
         is_null = reduce(or_, (df[s].is_null() for s in df.columns))
-        result = np.empty((len(df),), dtype=np_dtype)
+        result = np.empty((len(df),) + result_columns, dtype=np_dtype)
         df = df.fill_null(strategy="zero")
         scanner = _get_scanner(len(column_names))
         scanner(
@@ -776,7 +785,9 @@ def scan(
             is_null.to_numpy(),
             *(df[n].to_numpy() for n in column_names),
         )
-        return pl.Series(series.name, result, dtype=return_dtype).set(is_null, None)
+        return pl.DataFrame(pl.Series(series.name, result, dtype=return_dtype)).select(
+            pl.when(is_null).then(None).otherwise(series.name).alias(series.name)
+        )[series.name]
 
     return expr.map_batches(
         handle_data,
