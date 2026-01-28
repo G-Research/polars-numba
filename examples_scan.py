@@ -80,3 +80,63 @@ assert final_balance.to_dict(as_series=False) == {
     "user": ["alice", "bob"],
     "balance": [[50, 950, 950, 550, 610], [17.0, 17.5]],
 }
+
+
+###########################################################
+## Multiple inputs and multiple outputs                  ##
+## Inputs: Purchasing limit is both amount and units     ##
+## Outputs: Balance and number of purchased units        ##
+
+
+def purchase_order_balance(
+    attempted_purchase_prices_and_amounts: pl.Expr,
+    max_allowed_balance: float,
+    max_allowed_units: int,
+) -> pl.Expr:
+    """
+    Any purchase that takes the balance above the maximum allowed balance, or
+    cumulative number of units above the maximum, will be totally rejected.
+    """
+
+    def maybe_sum(
+        acc,
+        max_allowed_balance,
+        max_allowed_units,
+        attempted_purchase_price,
+        attempted_purchase_units,
+    ):
+        (current_balance, current_bought) = acc
+        new_balance = current_balance + (
+            attempted_purchase_price * attempted_purchase_units
+        )
+        new_units = current_bought + attempted_purchase_units
+        if new_balance <= max_allowed_balance and new_units <= max_allowed_units:
+            current_balance = new_balance
+            current_bought = new_units
+        return (current_balance, current_bought)
+
+    return attempted_purchase_prices_and_amounts.plumba.scan(
+        maybe_sum,
+        (0.0, 0.0),
+        pl.Array(pl.Float64, 2),
+        extra_args=[max_allowed_balance, max_allowed_units],
+    ).alias("balance_and_units")
+
+
+df = pl.DataFrame(
+    {
+        "attempted_purchase_prices": [5, 400, 70, 4, 60],
+        "attempted_purchase_units": [20, 2, 2, 10, 1],
+    }
+)
+result = (
+    df.select(
+        pl.struct("attempted_purchase_prices", "attempted_purchase_units").pipe(
+            purchase_order_balance, max_allowed_balance=1000, max_allowed_units=25
+        )
+    )["balance_and_units"]
+    .arr.to_struct(["balance", "bought_units"])
+    .struct.unnest()
+)
+assert result["balance"].to_list() == [100, 900, 900, 900, 960]
+assert result["bought_units"].to_list() == [20, 22, 22, 22, 23]

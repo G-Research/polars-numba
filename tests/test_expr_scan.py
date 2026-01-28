@@ -163,3 +163,28 @@ def test_two_dtype_variants():
             df.select(pl.col("a").plumba.scan(lambda acc, a: acc + a, 0, dtype))["a"],
             pl.Series("a", [1, 3], pl.Int64),
         )
+
+
+def test_multiple_outputs():
+    """
+    It's possible to return multiple outputs, which get converted to a
+    pl.Array.
+    """
+
+    def cum_sum(acc, a, b):
+        old_a, old_b = acc
+        return (old_a + a, old_b + b)
+
+    df = pl.DataFrame({"a": [1, 2, None, 6, 2], "b": [3, 2, 5, None, 1]})
+    result = df.select(
+        pl.struct(pl.all())
+        .plumba.scan(cum_sum, (6, 9), pl.Array(pl.Int64, shape=2))
+        .alias("result")
+    )
+    assert result["result"].to_list() == [
+        [7, 12],
+        [9, 14],
+        None,
+        None,
+        [11, 15],
+    ], result
