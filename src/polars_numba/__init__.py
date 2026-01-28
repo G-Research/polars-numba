@@ -674,7 +674,7 @@ def _numpy_dtype_and_columns(
     dtype: PolarsDataType,
 ) -> tuple[np.dtype, tuple[int] | tuple]:
     if isinstance(dtype, pl.Array):
-        return _polars_dtype_to_numpy(dtype.inner), (dtype.width,)
+        return _polars_dtype_to_numpy(dtype.inner), (dtype.size,)
     else:
         return _polars_dtype_to_numpy(dtype), ()
 
@@ -683,7 +683,7 @@ def collect_scan(
     df: pl.DataFrame | pl.LazyFrame,
     function: Callable[Concatenate[T, P], T],
     initial_accumulator: T,
-    result_dtype: PolarsDataType,
+    return_dtype: PolarsDataType,
     extra_args: Sequence[Any] = (),
     column_names: None | list[str] = None,
 ) -> pl.Series:
@@ -703,7 +703,7 @@ def collect_scan(
     to the function.
     """
     (lazy_df, numba_function, column_names) = _prep_for_df(df, function, column_names)
-    np_dtype, result_columns = _numpy_dtype_and_columns(result_dtype)
+    np_dtype, result_columns = _numpy_dtype_and_columns(return_dtype)
     extra_args = tuple(extra_args)
     scanner = None
 
@@ -730,9 +730,11 @@ def collect_scan(
             is_null.to_numpy(),
             *(s.to_numpy() for s in batch_df.get_columns()),
         )
-        results.append(
-            pl.Series("scan", batch_result, dtype=result_dtype).set(is_null, None)
-        )
+        result_batch = pl.Series("scan", batch_result, dtype=return_dtype)
+        result_batch = pl.DataFrame(result_batch).select(
+            pl.when(is_null).then(None).otherwise("scan").alias("scan")
+        )["scan"]
+        results.append(result_batch)
 
     result = pl.concat(results)
     return result
