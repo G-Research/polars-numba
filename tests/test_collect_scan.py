@@ -206,3 +206,42 @@ def test_multiple_outputs():
         None,
         [11, 15],
     ], result
+
+
+@pytest.mark.parametrize("lazy", [False, True])
+def test_accumulator_carried_between_batches(lazy):
+    """A scalar accumulator continues across the 50,000-row boundary."""
+    df = pl.DataFrame({"a": [1] * 50_003})
+    result = collect_scan(df.lazy() if lazy else df, add_columns, 7, pl.Int64)
+    assert_series_equal(result, pl.Series("scan", range(8, 50_011), pl.Int64))
+
+
+def test_accumulator_carried_past_null_batches():
+    """A trailing null or an all-null batch must not erase the accumulator."""
+    values = [1] * 49_999 + [None] * 50_001 + [2, None, 3]
+    df = pl.DataFrame({"a": pl.Series(values, dtype=pl.Int64)})
+    result = collect_scan(df, add_columns, 7, pl.Int64)
+    expected = list(range(8, 50_007)) + [None] * 50_001 + [50_008, None, 50_011]
+    assert_series_equal(result, pl.Series("scan", expected, pl.Int64))
+
+
+def test_multiple_output_accumulator_carried_between_batches():
+    """Each component of a tuple accumulator continues across batches."""
+
+    def cum_sum(acc, a, b):
+        old_a, old_b = acc
+        return (old_a + a, old_b + b)
+
+    df = pl.DataFrame({"a": [1] * 50_003, "b": [2] * 50_003})
+    dtype = pl.Array(pl.Int64, shape=2)
+    result = collect_scan(df, cum_sum, (6, 9), dtype)
+    expected = [(6 + i, 9 + 2 * i) for i in range(1, 50_004)]
+    assert_series_equal(result, pl.Series("scan", expected, dtype))
+
+
+@pytest.mark.parametrize("lazy", [False, True])
+def test_single_batch_scan_control(lazy):
+    """A small scan retains its existing results."""
+    df = pl.DataFrame({"a": [1, 2, 3]})
+    result = collect_scan(df.lazy() if lazy else df, add_columns, 7, pl.Int64)
+    assert_series_equal(result, pl.Series("scan", [8, 10, 13], pl.Int64))

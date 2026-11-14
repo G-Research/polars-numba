@@ -722,7 +722,7 @@ def collect_scan(
         # with nans. This is solvable with Numba Arrow support, maybe.
         batch_df = batch_df.fill_null(strategy="zero")
 
-        scanner(
+        acc, _ = scanner(
             numba_function,
             acc,
             extra_args,
